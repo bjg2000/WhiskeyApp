@@ -91,6 +91,7 @@
       const data = JSON.parse(ocrResult);
       displayWhiskeyInfo(data);
     } catch (error) {
+      console.error('Error details:', error);
       alert('Error identifying whiskey: ' + error.message);
     }
   }
