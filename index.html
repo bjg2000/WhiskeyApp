@@ -68,7 +68,7 @@
   async function identifyWhiskey() {
     const imageData = canvas.toDataURL('image/png');
     const prompt = `Identify this whiskey. Provide its name, general composition, and estimated price. Image: ${imageData}`;
-    const apiKey = 'YOUR_GOOGLE_GEMINI_API_KEY'; // Replace with your API key
+    const apiKey = 'AIzaSyB6fX37O4pw8G2o-TWOn5nROIPRHjc07_c'; // User's actual API key
 
     try {
       const response = await fetch('https://gemini.googleapis.com/v1/generateContent', {
@@ -77,10 +77,18 @@
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`
         },
-        body: JSON.stringify({ prompt })
+        body: JSON.stringify({
+          model: "gemini-2.0-flash",
+          contents: [
+            `Identify this whiskey. Provide its name, general composition, and estimated price. Image:`,
+            imageData
+          ]
+        })
       });
 
-      const data = await response.json();
+      const result = await response.json();
+      const ocrResult = result.text.replace('```', '').replace('json\n', '');
+      const data = JSON.parse(ocrResult);
       displayWhiskeyInfo(data);
     } catch (error) {
       alert('Error identifying whiskey: ' + error.message);
