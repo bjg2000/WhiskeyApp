@@ -33,7 +33,16 @@
         text-align: left; /* Align text left within the info block */
         position: relative; /* Needed for absolute positioning of delete button */
         border: 1px solid #4a5568; /* Subtle border */
+        display: flex; /* Use flexbox for layout */
+        gap: 1.5rem; /* Space between image and text */
+        flex-wrap: wrap; /* Allow wrapping on smaller screens */
     }
+
+    #whiskeyList > div .text-content {
+        flex-grow: 1; /* Allow text content to take available space */
+        min-width: 200px; /* Ensure text content has a minimum width before wrapping */
+    }
+
 
     #whiskeyList h3 {
         margin-top: 0;
@@ -82,11 +91,23 @@
         cursor: pointer;
         font-weight: bold;
         transition: background-color 0.3s ease;
+        z-index: 10; /* Ensure button is above other content */
     }
 
     .delete-button:hover {
         background-color: #c53030; /* Darker red on hover */
     }
+
+    /* Style for the saved image */
+    .saved-whiskey-image {
+        width: 100px; /* Small fixed width for the image container */
+        height: auto; /* Allow height to adjust */
+        border-radius: 0.25rem;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        flex-shrink: 0; /* Prevent image from shrinking */
+        object-fit: contain; /* Maintain aspect ratio without cropping */
+    }
+
 
     /* Hide the file input */
     #uploadInput {
@@ -98,7 +119,7 @@
         color: #cbd5e0; /* Lighter gray for labels */
     }
   </style>
-</head>
+  </head>
 <body class="p-6 text-center">
 
   <h1 class="text-3xl font-bold mb-6 text-gray-100">Whiskey Companion</h1>
@@ -133,11 +154,17 @@
     // or use the Tailwind CLI for better performance and smaller file sizes.
     // See: https://tailwindcss.com/docs/installation
 
+    // *** WARNING: Embedding your API key directly in client-side code (like this) is INSECURE. ***
+    // This is done here based on user request for a local-only file, but is NOT recommended
+    // for publicly hosted websites or applications where the source code is accessible.
+    const API_KEY = "AIzaSyB6fX37O4pw8G2o-TWOn5nROIPRHjc07_c"; // User's actual API key - Included as requested.
+
     let video = document.getElementById('video');
     let canvas = document.getElementById('canvas');
     let context = canvas.getContext('2d');
     let uploadInput = document.getElementById('uploadInput'); // Get the file input element
     let db; // Variable to hold the IndexedDB database instance
+    let currentImageData = null; // Variable to temporarily store the image data
 
     // Function to start the camera stream
     async function startCamera() {
@@ -152,9 +179,11 @@
         // Hide canvas and show video when starting camera
         canvas.style.display = 'none';
         video.style.display = 'block';
+        currentImageData = null; // Clear previous image data
       } catch (e) {
-        // Alert the user if camera access is denied or unavailable
-        alert('Camera access denied or not available.');
+        // Alert the user if camera access is denied or not available.
+        // Use a more user-friendly message box instead of alert()
+        showMessageBox('Camera access denied or not available.');
         console.error("Camera access error:", e);
       }
     }
@@ -179,6 +208,9 @@
           tracks.forEach(track => track.stop());
           video.srcObject = null; // Clear the video source
       }
+
+      // Get the image data and store it
+      currentImageData = canvas.toDataURL('image/png');
 
       // Call the function to identify the whiskey from the captured photo
       identifyWhiskey();
@@ -210,6 +242,9 @@
                     // Draw the image onto the canvas
                     context.drawImage(img, 0, 0, canvas.width, canvas.height);
 
+                    // Get the image data and store it
+                    currentImageData = canvas.toDataURL('image/png');
+
                     // Call the identifyWhiskey function with the canvas content
                     identifyWhiskey();
                 }
@@ -224,42 +259,90 @@
     // Function to send the captured image to the backend for identification
     async function identifyWhiskey() {
       // Get the image data from the canvas as a base64 encoded PNG
-      const imageData = canvas.toDataURL('image/png');
+      // We now use the stored currentImageData
+      if (!currentImageData) {
+          console.error("No image data available for identification.");
+          document.getElementById('whiskeyList').innerHTML = '<p class="text-red-400">Error: No image data available.</p>';
+          return;
+      }
 
       // Remove the data URI prefix (e.g., "data:image/png;base64,")
-      // The backend expects just the base64 string
-      const base64Image = imageData.split(',')[1];
+      // The API expects just the base64 string
+      const base64Image = currentImageData.split(',')[1];
 
       // Display a loading message
       document.getElementById('whiskeyList').innerHTML = '<p class="text-gray-300">Identifying whiskey...</p>';
 
+      // *** Direct API Call to Google Generative AI ***
+      // WARNING: API Key is exposed in this client-side code.
+      const API_ENDPOINT = `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
 
       try {
-        // Send the image data to the backend Flask application
-        const response = await fetch('http://localhost:5000/generateContent', {
+        const response = await fetch(API_ENDPOINT, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ image: base64Image }) // Send only the base64 string
+          body: JSON.stringify({
+             contents: [
+                {
+                   parts: [
+                      { text: "Identify this whiskey. Provide its name, general composition (ingredients and flavor characteristics), and estimated price in US dollars. Return the information in JSON format." }, // Updated prompt to specify US dollars and simplify composition request
+                      { inline_data: { mime_type: 'image/png', data: base64Image } }
+                   ]
+                }
+             ]
+          })
         });
 
         // *** IMPORTANT: Check if the response was successful (status code 2xx) ***
         if (!response.ok) {
-            // If response is not OK, read the error message from the backend
-            const errorResponse = await response.json(); // Assuming backend sends JSON error
-            console.error('HTTP error!', response.status, errorResponse);
+            // If response is not OK, try to read the error message
+            let errorDetails = 'Unknown error';
+            try {
+                const errorResponse = await response.json();
+                errorDetails = errorResponse.error ? (errorResponse.error.message || JSON.stringify(errorResponse)) : JSON.stringify(errorResponse);
+            } catch (jsonError) {
+                errorDetails = await response.text(); // Fallback to text if JSON parsing fails
+            }
+            console.error('HTTP error!', response.status, errorDetails);
             // Display the error message to the user
-            document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error identifying whiskey: ${errorResponse.error || 'Unknown error'}. ${errorResponse.details || ''}</p>`;
+            document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error identifying whiskey: ${response.status} - ${errorDetails.substring(0, 200)}...</p>`;
             return; // Stop processing
         }
 
         // If the response is OK, parse the JSON data
-        const data = await response.json();
+        const result = await response.json();
+
+        // Check if the response contains expected data structure
+        if (!result.candidates || !result.candidates[0] || !result.candidates[0].content || !result.candidates[0].content.parts) {
+             console.error("Unexpected API response structure:", result);
+             document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error: Unexpected response format from AI model.</p>`;
+             return;
+        }
+
+        // Extract the text content from the response
+        const rawText = result.candidates[0].content.parts.map(part => part.text).join('');
+
+        // Attempt to parse the JSON from the raw text
+        let data;
+        try {
+             // Remove markdown code block formatting if present
+             const jsonString = rawText.replace('```json\n', '').replace('```', '').trim();
+             data = JSON.parse(jsonString);
+             console.log("Parsed JSON data from API:", data); // Log the parsed data structure
+             console.log("Type of data.composition:", typeof data.composition); // Log the type of composition
+        } catch (jsonError) {
+             console.error("JSON Parsing Error:", jsonError);
+             console.log("Raw text from API:", rawText);
+             document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error: Failed to parse whiskey data from AI model response. Raw text: ${rawText.substring(0, 200)}...</p>`;
+             return;
+        }
+
 
         // Process and display the successful data
-        console.log("Received data from backend:", data); // Log received data
-        displayWhiskeyInfo(data);
+        console.log("Data being prepared for display and addToList:", { name: data.name, composition: data.composition, estimated_price: data.estimated_price }); // Log data before display/addToList
+        displayWhiskeyInfo(data); // Call display function with data
 
       } catch (error) {
         // Catch any network errors or other exceptions during the fetch
@@ -269,6 +352,13 @@
       }
     }
 
+    // Helper function to clean up composition string
+    function cleanCompositionString(str) {
+        if (typeof str !== 'string') return str;
+        // Remove common unwanted characters like quotes, backslashes, curly braces, brackets, etc.
+        return str.replace(/[\\"{}\[\]]/g, '').trim();
+    }
+
     // Function to display the identified whiskey information
     function displayWhiskeyInfo(data) {
       const whiskeyList = document.getElementById('whiskeyList');
@@ -276,38 +366,79 @@
       whiskeyList.innerHTML = '';
 
       const whiskeyInfo = document.createElement('div');
+
       // Ensure data properties are strings before escaping
       const name = String(data.name || '');
-      const composition = String(data.composition || '');
       const estimated_price = String(data.estimated_price || '');
 
-      console.log("Data being prepared for display and addToList:", { name, composition, estimated_price }); // Log data before display/addToList
+      // Get composition as a string, format if object, then clean
+      let composition = 'No composition available.';
+      if (typeof data.composition === 'object' && data.composition !== null) {
+          let tempComposition = '';
+          if (data.composition.ingredients) {
+              tempComposition += `Ingredients: ${data.composition.ingredients}`;
+          }
+          if (data.composition.flavor_characteristics) {
+              if (tempComposition) tempComposition += ', '; // Add separator if ingredients exist
+              tempComposition += `Flavor Characteristics: ${data.composition.flavor_characteristics}`;
+          }
+          composition = tempComposition.trim();
+      } else if (typeof data.composition === 'string') {
+          composition = data.composition; // Use as is if already a string
+      }
+      const cleanedComposition = cleanCompositionString(composition);
 
+      console.log("Data being prepared for display and addToList:", { name, composition: data.composition, estimated_price, cleanedComposition }); // Log data before display/addToList
+
+      // Create the HTML structure
       whiskeyInfo.innerHTML = `
-        <h3 class="text-xl font-semibold mb-2">${name || 'Unknown Whiskey'}</h3>
-        <p class="text-gray-400 mb-2">Composition: ${composition || 'No composition available.'}</p>
-        <p class="text-gray-400 mb-4">Estimated Price: ${estimated_price || 'N/A'}</p>
-        <button onclick="addToMyList('${escape(name)}', '${escape(composition)}', '${escape(estimated_price)}')"
-                class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out text-sm">
-            Add to My List
-        </button>
+        <h3 class="text-xl font-semibold mb-2">${escape(name || 'Unknown Whiskey')}</h3>
+        <p class="text-gray-400 mb-2">Composition:</p>
+        <p class="text-gray-400 mb-4">${escape(cleanedComposition || 'No composition available.')}</p>
+        <p class="text-gray-400 mb-4">Estimated Price: $${escape(estimated_price || 'N/A')}</p>
       `;
+
+      // Create the button element separately
+      const addButton = document.createElement('button');
+      addButton.textContent = 'Add to My List';
+      addButton.className = 'mt-4 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out text-sm';
+
+      // Add the event listener to the button
+      addButton.addEventListener('click', function() {
+          // Pass the data directly to the addToMyList function
+          addToMyList(name, cleanedComposition, estimated_price);
+      });
+
+      // Append the button to the whiskeyInfo div
+      whiskeyInfo.appendChild(addButton);
+
+      // Append the whiskeyInfo div to the whiskeyList
       whiskeyList.appendChild(whiskeyInfo);
     }
 
     // Function to add the identified whiskey to the IndexedDB list
-    function addToMyList(name, composition, estimated_price) {
-        // Unescape the values before adding to DB
-        const unescapedName = unescape(name);
-        const unescapedComposition = unescape(composition);
-        const unescapedEstimatedPrice = unescape(estimated_price);
+    // Now retrieves image data from currentImageData variable
+    function addToMyList(name, composition, estimated_price) { // Removed imageData parameter
+        // Unescape the values before adding to DB - not needed here as we get them directly from JS variables
+        const unescapedName = name;
+        const unescapedComposition = composition; // This is now the cleaned string
+        const unescapedEstimatedPrice = estimated_price;
+        // Use the stored currentImageData
+        const imageDataToSave = currentImageData;
 
-        console.log("Data received in addToMyList:", { unescapedName, unescapedComposition, unescapedEstimatedPrice }); // Log data received in addToMyList
+
+        console.log("Data received in addToMyList:", { unescapedName, unescapedComposition, unescapedEstimatedPrice, imageDataToSave: imageDataToSave ? 'Image data present' : 'No image data' }); // Log data received in addToMyList
 
         const transaction = db.transaction(['whiskeys'], 'readwrite');
         const store = transaction.objectStore('whiskeys');
         // Store composition as 'description' and estimated_price as 'price' for consistency with display functions
-        const whiskey = { name: unescapedName, description: unescapedComposition, price: unescapedEstimatedPrice, notes: '' };
+        const whiskey = {
+            name: unescapedName,
+            description: unescapedComposition, // Store the cleaned string composition
+            price: unescapedEstimatedPrice,
+            notes: '',
+            image: imageDataToSave // Save the image data from the variable
+        };
 
         console.log("Whiskey object being added to IndexedDB:", whiskey); // Log object before adding to DB
 
@@ -317,6 +448,7 @@
         request.onsuccess = function() {
             console.log("Whiskey added to list successfully:", whiskey);
             displaySavedWhiskeys(); // Refresh the displayed list
+            currentImageData = null; // Clear the temporary image data after saving
         };
 
         request.onerror = function(event) {
@@ -325,7 +457,7 @@
         };
     }
 
-    // Function to display the saved whiskeys from IndexedDB with editable fields
+    // Function to display the saved whiskeys from IndexedDB with editable fields and image
     function displaySavedWhiskeys() {
       const transaction = db.transaction(['whiskeys'], 'readonly');
       const store = transaction.objectStore('whiskeys');
@@ -338,28 +470,35 @@
         if (cursor) {
           const whiskey = cursor.value;
           console.log("Whiskey object retrieved from IndexedDB:", whiskey); // Log object from DB
+          console.log("Type of whiskey.description:", typeof whiskey.description); // Log the type of description from DB
 
           const listItem = document.createElement('div');
           listItem.setAttribute('data-key', cursor.key); // Store the IndexedDB key
 
+          // Ensure description is a string before using it in the textarea
+          const displayComposition = typeof whiskey.description === 'string' ? whiskey.description : JSON.stringify(whiskey.description || '');
+
+
           listItem.innerHTML = `
             <button class="delete-button" onclick="deleteWhiskey(${cursor.key})">&times;</button>
-            <label for="name-${cursor.key}" class="block text-sm font-medium text-gray-400">Name:</label>
-            <input type="text" id="name-${cursor.key}" class="editable-field text-lg font-semibold" value="${escape(whiskey.name)}">
+            ${whiskey.image ? `<img src="${escape(whiskey.image)}" class="saved-whiskey-image" alt="Whiskey Image">` : ''}
+            <div class="text-content">
+                <label for="name-${cursor.key}" class="block text-sm font-medium text-gray-400">Name:</label>
+                <input type="text" id="name-${cursor.key}" class="editable-field text-lg font-semibold" value="${escape(whiskey.name)}">
 
-            <label for="composition-${cursor.key}" class="block text-sm font-medium text-gray-400 mt-2">Composition:</label>
-            <input type="text" id="composition-${cursor.key}" class="editable-field text-gray-400" value="${escape(whiskey.description)}">
+                <label for="composition-${cursor.key}" class="block text-sm font-medium text-gray-400 mt-2">Composition:</label>
+                <textarea id="composition-${cursor.key}" placeholder="Ingredients and flavor characteristics..." class="w-full p-3 mt-1 border rounded-md focus:outline-none focus:ring focus:border-blue-300">${escape(displayComposition)}</textarea>
+                <label for="price-${cursor.key}" class="block text-sm font-medium text-gray-400 mt-2">Price:</label>
+                <input type="text" id="price-${cursor.key}" class="editable-field text-gray-400" value="${escape(whiskey.price)}">
 
-            <label for="price-${cursor.key}" class="block text-sm font-medium text-gray-400 mt-2">Price:</label>
-            <input type="text" id="price-${cursor.key}" class="editable-field text-gray-400" value="${escape(whiskey.price)}">
+                <label for="notes-${cursor.key}" class="block text-sm font-medium text-gray-400 mt-2">Notes:</label>
+                <textarea id="notes-${cursor.key}" placeholder="Add your notes here..." class="w-full p-3 mt-1 border rounded-md focus:outline-none focus:ring focus:border-blue-300">${escape(whiskey.notes)}</textarea>
 
-            <label for="notes-${cursor.key}" class="block text-sm font-medium text-gray-400 mt-2">Notes:</label>
-            <textarea id="notes-${cursor.key}" placeholder="Add your notes here..." class="w-full p-3 mt-1 border rounded-md focus:outline-none focus:ring focus:border-blue-300">${escape(whiskey.notes)}</textarea>
-
-            <button onclick="saveWhiskeyEdit(${cursor.key})"
+                <button onclick="saveWhiskeyEdit(${cursor.key})"
                     class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out text-sm">
-                Save Changes
-            </button>
+                    Save Changes
+                </button>
+            </div>
           `;
           whiskeyList.appendChild(listItem);
           cursor.continue(); // Move to the next item in the cursor
@@ -381,7 +520,7 @@
 
         // Get the input field values
         const name = unescape(document.getElementById(`name-${key}`).value);
-        const composition = unescape(document.getElementById(`composition-${key}`).value);
+        const composition = unescape(document.getElementById(`composition-${key}`).value); // Get value from textarea
         const price = unescape(document.getElementById(`price-${key}`).value);
         const notes = unescape(document.getElementById(`notes-${key}`).value);
 
@@ -396,6 +535,7 @@
                 whiskey.description = composition; // Store composition in description field
                 whiskey.price = price;
                 whiskey.notes = notes;
+                // Image data is not edited, it remains the same
 
                 console.log("Whiskey object being saved after edit:", whiskey); // Log object before saving
 
@@ -456,8 +596,12 @@
             const store = db.createObjectStore('whiskeys', { keyPath: 'id', autoIncrement: true });
             // Create an index on the 'name' property for faster lookups (optional)
             store.createIndex('name', 'name', { unique: false });
+            // No need to create an index for image data or composition, as they won't be searched on
             console.log("IndexedDB 'whiskeys' object store created.");
         }
+        // If you were upgrading from a previous version without the image field,
+        // you would handle the upgrade here to add the 'image' field to existing objects.
+        // For this example, we assume a fresh database or that the new field is okay to be missing in old entries.
       };
 
       // This event is triggered when the database is successfully opened
@@ -487,6 +631,12 @@
     function unescape(str) {
          if (typeof str !== 'string') return str; // Return non-strings directly
         return str.replace(/&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+    }
+
+    // Function to display a simple message box (replaces alert for better styling potential)
+    function showMessageBox(message) {
+        // You can implement a more sophisticated message box here using HTML/CSS/JS
+        alert(message); // Using alert for simplicity in this version
     }
 
   </script>
