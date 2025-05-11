@@ -43,6 +43,7 @@
   let video = document.getElementById('video');
   let canvas = document.getElementById('canvas');
   let context = canvas.getContext('2d');
+  let db;
 
   async function startCamera() {
     try {
@@ -61,7 +62,105 @@
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    identifyWhiskey();
   }
+
+  async function identifyWhiskey() {
+    const imageData = canvas.toDataURL('image/png');
+    const prompt = `Identify this whiskey. Provide its name, general composition, and estimated price. Image: ${imageData}`;
+    const apiKey = 'YOUR_GOOGLE_GEMINI_API_KEY'; // Replace with your API key
+
+    try {
+      const response = await fetch('https://gemini.googleapis.com/v1/generateContent', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({ prompt })
+      });
+
+      const data = await response.json();
+      displayWhiskeyInfo(data);
+    } catch (error) {
+      alert('Error identifying whiskey: ' + error.message);
+    }
+  }
+
+  function displayWhiskeyInfo(data) {
+    const whiskeyList = document.getElementById('whiskeyList');
+    const whiskeyInfo = document.createElement('div');
+    whiskeyInfo.innerHTML = `
+      <h3>${data.name || 'Unknown Whiskey'}</h3>
+      <p>${data.description || 'No description available.'}</p>
+      <p>Estimated Price: ${data.price || 'N/A'}</p>
+      <button onclick="addToMyList('${data.name}', '${data.description}', '${data.price}')">Add to My List</button>
+    `;
+    whiskeyList.appendChild(whiskeyInfo);
+  }
+
+  function addToMyList(name, description, price) {
+    const transaction = db.transaction(['whiskeys'], 'readwrite');
+    const store = transaction.objectStore('whiskeys');
+    const whiskey = { name, description, price, notes: '' };
+    store.add(whiskey);
+
+    displaySavedWhiskeys();
+  }
+
+  function displaySavedWhiskeys() {
+    const transaction = db.transaction(['whiskeys'], 'readonly');
+    const store = transaction.objectStore('whiskeys');
+    const whiskeyList = document.getElementById('whiskeyList');
+    whiskeyList.innerHTML = '';
+
+    store.openCursor().onsuccess = function(event) {
+      const cursor = event.target.result;
+      if (cursor) {
+        const whiskey = cursor.value;
+        const listItem = document.createElement('div');
+        listItem.innerHTML = `
+          <h3>${whiskey.name}</h3>
+          <p>${whiskey.description}</p>
+          <p>Price: ${whiskey.price}</p>
+          <textarea placeholder="Add your notes here..." onchange="updateNotes('${cursor.key}', this.value)">${whiskey.notes}</textarea>
+        `;
+        whiskeyList.appendChild(listItem);
+        cursor.continue();
+      }
+    };
+  }
+
+  function updateNotes(key, notes) {
+    const transaction = db.transaction(['whiskeys'], 'readwrite');
+    const store = transaction.objectStore('whiskeys');
+    store.get(key).onsuccess = function(event) {
+      const whiskey = event.target.result;
+      whiskey.notes = notes;
+      store.put(whiskey);
+    };
+  }
+
+  function initDatabase() {
+    const request = indexedDB.open('WhiskeyDB', 1);
+
+    request.onupgradeneeded = function(event) {
+      db = event.target.result;
+      const store = db.createObjectStore('whiskeys', { keyPath: 'id', autoIncrement: true });
+      store.createIndex('name', 'name', { unique: false });
+    };
+
+    request.onsuccess = function(event) {
+      db = event.target.result;
+      displaySavedWhiskeys();
+    };
+
+    request.onerror = function(event) {
+      alert('Database error: ' + event.target.errorCode);
+    };
+  }
+
+  window.onload = initDatabase;
 </script>
 
 </body>
