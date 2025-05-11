@@ -1,56 +1,68 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Whiskey Companion</title>
   <style>
-    body { font-family: sans-serif; text-align: center; margin: 20px; }
-    video, canvas, img { max-width: 100%; border: 1px solid #ccc; margin-top: 10px; }
-    #myList { margin-top: 20px; text-align: left; }
+    body {
+      font-family: sans-serif;
+      padding: 1em;
+      text-align: center;
+    }
+    video, canvas {
+      width: 90%;
+      max-width: 400px;
+      margin: 1em auto;
+      display: block;
+      border-radius: 8px;
+    }
+    button {
+      padding: 0.75em 1.5em;
+      font-size: 1em;
+      border: none;
+      border-radius: 10px;
+      margin: 0.5em;
+      background: #f0f0f0;
+    }
   </style>
 </head>
 <body>
-  <h1>Whiskey Companion</h1>
-  <video id="video" autoplay playsinline width="300" height="200"></video><br>
-  <button id="captureBtn">Capture Photo</button><br>
-  <canvas id="canvas" style="display: none;"></canvas>
-  <img id="photo" alt="Captured photo" style="display:none;"><br>
-  <button id="identifyBtn" style="display:none;">Identify Whiskey</button>
 
-  <h2>My List</h2>
-  <ul id="myList"></ul>
+<h1>Whiskey Companion</h1>
 
-  <script>
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const photo = document.getElementById('photo');
-    const captureBtn = document.getElementById('captureBtn');
-    const identifyBtn = document.getElementById('identifyBtn');
-    const myList = document.getElementById('myList');
+<video id="video" autoplay playsinline></video>
+<canvas id="canvas" style="display:none;"></canvas>
 
-    // Start camera
-    navigator.mediaDevices.getUserMedia({ video: true })
-      .then(stream => video.srcObject = stream)
-      .catch(err => alert("Camera access error: " + err.message));
+<button onclick="startCamera()">Start Camera</button>
+<button onclick="capturePhoto()">Take Photo</button>
 
-    captureBtn.onclick = () => {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      canvas.getContext('2d').drawImage(video, 0, 0);
-      const dataUrl = canvas.toDataURL('image/png');
-      photo.src = dataUrl;
-      photo.style.display = 'block';
-      identifyBtn.style.display = 'inline-block';
-    };
+<h2>My List</h2>
+<div id="whiskeyList"></div>
 
-    identifyBtn.onclick = () => {
-      // For now, mock identification
-      const whiskeyName = "Mock Whiskey " + Math.floor(Math.random() * 1000);
-      const li = document.createElement('li');
-      li.textContent = whiskeyName;
-      myList.appendChild(li);
-    };
-  </script>
+<script>
+  let video = document.getElementById('video');
+  let canvas = document.getElementById('canvas');
+  let context = canvas.getContext('2d');
+
+  async function startCamera() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' },
+        audio: false
+      });
+      video.srcObject = stream;
+    } catch (e) {
+      alert('Camera access denied or not available.');
+    }
+  }
+
+  function capturePhoto() {
+    canvas.style.display = 'block';
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+  }
+</script>
+
 </body>
 </html>
