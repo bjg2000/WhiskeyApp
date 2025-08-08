@@ -175,14 +175,17 @@
 
 
     <div class="flex justify-center space-x-4 mb-6">
-        <button onclick="startCamera()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out">
+        <button id="camera-button" onclick="startCamera()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out">
             Start Camera
         </button>
-        <button onclick="capturePhoto()" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out">
+        <button id="capture-button" onclick="capturePhoto()" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out disabled:bg-gray-500" disabled>
             Take Photo
         </button>
-        <button onclick="triggerUpload()" class="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out">
+        <button id="upload-button" onclick="triggerUpload()" class="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out">
             Upload Photo
+        </button>
+        <button id="identify-button" onclick="identifyWhiskey()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out disabled:bg-gray-500" disabled>
+            Identify Photo
         </button>
     </div>
 
@@ -219,6 +222,7 @@
         let db; // IndexedDB database instance
         let currentImageData = null; // Temporarily store the image data
         let allWhiskies = []; // Array to store all whiskeys for efficient searching
+        let isCameraActive = false; // New state variable to track camera status
 
         // --- API KEY MANAGEMENT ---
         /**
@@ -303,6 +307,8 @@
                 canvas.style.display = 'none';
                 video.style.display = 'block';
                 currentImageData = null;
+                isCameraActive = true;
+                updateButtonStates();
             } catch (e) {
                 showMessageBox('Camera access denied or not available.');
                 console.error("Camera access error:", e);
@@ -310,6 +316,10 @@
         }
 
         function capturePhoto() {
+            if (!isCameraActive) {
+                showMessageBox("Please start the camera first.");
+                return;
+            }
             canvas.style.display = 'block';
             video.style.display = 'none';
             canvas.width = video.videoWidth;
@@ -323,7 +333,8 @@
                 video.srcObject = null;
             }
             currentImageData = canvas.toDataURL('image/png');
-            identifyWhiskey();
+            isCameraActive = false;
+            updateButtonStates();
         }
 
         function triggerUpload() {
@@ -343,13 +354,28 @@
                         canvas.height = img.height;
                         context.drawImage(img, 0, 0, canvas.width, canvas.height);
                         currentImageData = canvas.toDataURL('image/png');
-                        identifyWhiskey();
+                        // If camera was active, stop it
+                        if (isCameraActive && video.srcObject) {
+                            const stream = video.srcObject;
+                            const tracks = stream.getTracks();
+                            tracks.forEach(track => track.stop());
+                            video.srcObject = null;
+                        }
+                        isCameraActive = false;
+                        updateButtonStates();
                     }
                     img.src = e.target.result;
                 }
                 reader.readAsDataURL(file);
             }
         });
+
+        // --- NEW FUNCTIONALITY: ENABLE/DISABLE BUTTONS BASED ON STATE ---
+        function updateButtonStates() {
+            document.getElementById('capture-button').disabled = !isCameraActive;
+            document.getElementById('identify-button').disabled = !currentImageData;
+        }
+
 
         // --- API CALL & DATA PROCESSING ---
         async function identifyWhiskey(textInput = null) {
@@ -360,11 +386,17 @@
             }
 
             if (!textInput && !currentImageData) {
-                console.error("No input data available for identification.");
+                // This check prevents the 400 error from a button that should be disabled
+                showMessageBox("Please take or upload a photo, or enter a whiskey name.");
                 document.getElementById('whiskeyList').innerHTML = '<p class="text-red-400">Error: No image or text data available.</p>';
                 return;
             }
-
+            
+            const identifyButton = document.getElementById('identify-button');
+            const originalButtonText = identifyButton.textContent;
+            identifyButton.textContent = 'Identifying...';
+            identifyButton.disabled = true;
+            
             document.getElementById('whiskeyList').innerHTML = '<p class="text-gray-300">Identifying whiskey...</p>';
             
             const API_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${decryptedApiKey}`;
@@ -429,6 +461,10 @@
             } catch (error) {
                 console.error('Error identifying whiskey:', error);
                 document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error identifying whiskey: ${error.message}</p>`;
+            } finally {
+                // Restore button state
+                identifyButton.textContent = originalButtonText;
+                updateButtonStates();
             }
         }
         
@@ -439,14 +475,16 @@
                 // Clear any image data as this is a text-only identification
                 currentImageData = null;
                 // Stop any running camera stream
-                if (video.srcObject) {
+                if (isCameraActive && video.srcObject) {
                     const stream = video.srcObject;
                     const tracks = stream.getTracks();
                     tracks.forEach(track => track.stop());
                     video.srcObject = null;
                 }
+                isCameraActive = false;
                 video.style.display = 'none';
                 canvas.style.display = 'none';
+                updateButtonStates();
 
                 identifyWhiskey(textInput);
             } else {
@@ -526,6 +564,7 @@
             request.onsuccess = function() {
                 displaySavedWhiskies();
                 currentImageData = null; // Clear temp image
+                updateButtonStates(); // Disable button after adding to list
             };
             request.onerror = function(event) {
                 console.error("Error adding whiskey:", event.target.error);
@@ -589,6 +628,15 @@
                 const listItem = document.createElement('div');
                 // Use the whiskey's id for the data-key
                 listItem.setAttribute('data-key', whiskey.id);
+                listItem.className = 'bg-gray-800 p-6 rounded-lg shadow-lg relative flex flex-wrap gap-6 mb-4';
+
+                // **FIXED**: The delete button is now created and appended directly.
+                const deleteButton = document.createElement('button');
+                deleteButton.className = 'delete-button';
+                deleteButton.textContent = '×';
+                deleteButton.onclick = () => deleteWhiskey(whiskey.id);
+                listItem.appendChild(deleteButton);
+
 
                 // Re-structured the photo and button container for a cleaner, stacked layout
                 const photoContainer = document.createElement('div');
@@ -830,6 +878,8 @@
                     identifyWhiskeyFromText();
                 }
             });
+            // Initial state of buttons
+            updateButtonStates();
         }
 
         window.onload = initializeApp;
