@@ -1,546 +1,631 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Whiskey Companion</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
-  <style>
-    /* Custom styles or overrides for dark theme */
-    body {
-      font-family: 'Inter', sans-serif; /* Using Inter font */
-      background-color: #1a202c; /* Dark background */
-      color: #e2e8f0; /* Light text */
-    }
-    /* Ensure video and canvas maintain aspect ratio and are responsive */
-    video, canvas {
-        width: 100%; /* Make them take full width of their container */
-        height: auto; /* Maintain aspect ratio */
-        max-width: 500px; /* Limit max width */
-        margin: 1.5rem auto; /* Center block elements with margin */
-        display: block;
-        border-radius: 0.5rem; /* Rounded corners */
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3); /* More pronounced shadow for dark theme */
-    }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Whiskey Companion</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+    <style>
+        /* Custom styles or overrides for dark theme */
+        body {
+            font-family: 'Inter', sans-serif; /* Using Inter font */
+            background-color: #1a202c; /* Dark background */
+            color: #e2e8f0; /* Light text */
+        }
+        /* Ensure video and canvas maintain aspect ratio and are responsive */
+        video, canvas {
+            width: 100%; /* Make them take full width of their container */
+            height: auto; /* Maintain aspect ratio */
+            max-width: 500px; /* Limit max width */
+            margin: 1.5rem auto; /* Center block elements with margin */
+            display: block;
+            border-radius: 0.5rem; /* Rounded corners */
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3); /* More pronounced shadow for dark theme */
+        }
 
-    /* Style for the whiskey info sections */
-    #whiskeyList > div {
-        background-color: #2d3748; /* Darker background for list items */
-        padding: 1.5rem;
-        margin-bottom: 1rem;
-        border-radius: 0.5rem;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-        text-align: left; /* Align text left within the info block */
-        position: relative; /* Needed for absolute positioning of delete button */
-        border: 1px solid #4a5568; /* Subtle border */
-        display: flex; /* Use flexbox for layout */
-        gap: 1.5rem; /* Space between image and text */
-        flex-wrap: wrap; /* Allow wrapping on smaller screens */
-    }
+        /* Style for the whiskey info sections */
+        #whiskeyList > div {
+            background-color: #2d3748; /* Darker background for list items */
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            text-align: left; /* Align text left within the info block */
+            position: relative; /* Needed for absolute positioning of delete button */
+            border: 1px solid #4a5568; /* Subtle border */
+            display: flex; /* Use flexbox for layout */
+            gap: 1.5rem; /* Space between image and text */
+            flex-wrap: wrap; /* Allow wrapping on smaller screens */
+        }
 
-    #whiskeyList > div .text-content {
-        flex-grow: 1; /* Allow text content to take available space */
-        min-width: 200px; /* Ensure text content has a minimum width before wrapping */
-    }
-
-
-    #whiskeyList h3 {
-        margin-top: 0;
-        color: #90cdf4; /* Lighter blue for headings */
-    }
-
-    textarea {
-        width: 100%;
-        min-height: 80px;
-        padding: 0.75rem;
-        margin-top: 0.75rem;
-        border: 1px solid #4a5568; /* Darker border */
-        border-radius: 0.25rem;
-        box-sizing: border-box; /* Include padding and border in element's total width and height */
-        background-color: #4a5568; /* Dark background for textarea */
-        color: #e2e8f0; /* Light text */
-    }
-
-    /* Style for editable fields */
-    .editable-field {
-        border: 1px solid #4a5568; /* Darker border */
-        padding: 0.5rem;
-        border-radius: 0.25rem;
-        margin-bottom: 0.5rem;
-        display: block; /* Make them block elements for better layout */
-        width: 100%; /* Take full width */
-        box-sizing: border-box;
-        background-color: #4a5568; /* Dark background for input fields */
-        color: #e2e8f0; /* Light text */
-    }
-
-    /* Style for the delete button */
-    .delete-button {
-        position: absolute;
-        top: 0.75rem;
-        right: 0.75rem;
-        background-color: #e53e3e; /* Red color */
-        color: white;
-        border: none;
-        border-radius: 50%; /* Circular button */
-        width: 2rem;
-        height: 2rem;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        cursor: pointer;
-        font-weight: bold;
-        transition: background-color 0.3s ease;
-        z-index: 10; /* Ensure button is above other content */
-    }
-
-    .delete-button:hover {
-        background-color: #c53030; /* Darker red on hover */
-    }
-
-    /* Style for the saved image */
-    .saved-whiskey-image {
-        width: 100px; /* Small fixed width for the image container */
-        height: auto; /* Allow height to adjust */
-        border-radius: 0.25rem;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        flex-shrink: 0; /* Prevent image from shrinking */
-        object-fit: contain; /* Maintain aspect ratio without cropping */
-    }
+        #whiskeyList > div .text-content {
+            flex-grow: 1; /* Allow text content to take available space */
+            min-width: 200px; /* Ensure text content has a minimum width before wrapping */
+        }
 
 
-    /* Hide the file input */
-    #uploadInput {
-        display: none;
-    }
+        #whiskeyList h3 {
+            margin-top: 0;
+            color: #90cdf4; /* Lighter blue for headings */
+        }
 
-    /* Adjust text color for labels in dark theme */
-    label {
-        color: #cbd5e0; /* Lighter gray for labels */
-    }
-  </style>
-  </head>
+        textarea {
+            width: 100%;
+            min-height: 80px;
+            padding: 0.75rem;
+            margin-top: 0.75rem;
+            border: 1px solid #4a5568; /* Darker border */
+            border-radius: 0.25rem;
+            box-sizing: border-box; /* Include padding and border in element's total width and height */
+            background-color: #4a5568; /* Dark background for textarea */
+            color: #e2e8f0; /* Light text */
+        }
+
+        /* Style for editable fields */
+        .editable-field {
+            border: 1px solid #4a5568; /* Darker border */
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            margin-bottom: 0.5rem;
+            display: block; /* Make them block elements for better layout */
+            width: 100%; /* Take full width */
+            box-sizing: border-box;
+            background-color: #4a5568; /* Dark background for input fields */
+            color: #e2e8f0; /* Light text */
+        }
+
+        /* Style for the delete button */
+        .delete-button {
+            position: absolute;
+            top: 0.75rem;
+            right: 0.75rem;
+            background-color: #e53e3e; /* Red color */
+            color: white;
+            border: none;
+            border-radius: 50%; /* Circular button */
+            width: 2rem;
+            height: 2rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+            z-index: 10; /* Ensure button is above other content */
+        }
+
+        .delete-button:hover {
+            background-color: #c53030; /* Darker red on hover */
+        }
+
+        /* Style for the saved image */
+        .saved-whiskey-image {
+            width: 100px; /* Small fixed width for the image container */
+            height: auto; /* Allow height to adjust */
+            border-radius: 0.25rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            flex-shrink: 0; /* Prevent image from shrinking */
+            object-fit: contain; /* Maintain aspect ratio without cropping */
+        }
+
+
+        /* Hide the file input */
+        #uploadInput {
+            display: none;
+        }
+
+        /* Adjust text color for labels in dark theme */
+        label {
+            color: #cbd5e0; /* Lighter gray for labels */
+        }
+
+        /* Custom Modal for messages (replaces alert()) */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background-color: #2d3748;
+            color: #e2e8f0;
+            padding: 2rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+            max-width: 400px;
+            text-align: center;
+        }
+    </style>
+</head>
 <body class="p-6 text-center">
+    <!-- Message Box Modal -->
+    <div id="message-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <p id="modal-message" class="text-lg mb-4"></p>
+            <button onclick="hideMessageBox()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">OK</button>
+        </div>
+    </div>
 
-  <h1 class="text-3xl font-bold mb-6 text-gray-100">Whiskey Companion</h1>
+    <h1 class="text-3xl font-bold mb-6 text-gray-100">Whiskey Companion</h1>
 
-  <!-- API Key Unlock Section -->
-  <div id="auth-container" class="max-w-md mx-auto mb-6 p-4 bg-gray-800 rounded-lg shadow-lg">
-      <label for="passkey" class="block mb-2 font-medium text-gray-300">Enter Password to Unlock App</label>
-      <div class="flex">
-        <input type="password" id="passkey" class="w-full bg-gray-700 border border-gray-600 rounded-l-lg p-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="Your password...">
-        <button onclick="unlockApi()" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-r-lg transition duration-300">Unlock</button>
-      </div>
-      <p id="auth-status" class="text-sm mt-2 text-yellow-400">App is locked.</p>
-  </div>
+    <!-- API Key Unlock Section -->
+    <div id="auth-container" class="max-w-md mx-auto mb-6 p-4 bg-gray-800 rounded-lg shadow-lg">
+        <label for="passkey" class="block mb-2 font-medium text-gray-300">Enter Password to Unlock App</label>
+        <div class="flex">
+            <input type="password" id="passkey" class="w-full bg-gray-700 border border-gray-600 rounded-l-lg p-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="Your password...">
+            <button onclick="unlockApi()" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-r-lg transition duration-300">Unlock</button>
+        </div>
+        <p id="auth-status" class="text-sm mt-2 text-yellow-400">App is locked.</p>
+    </div>
 
-  <div class="flex flex-col items-center">
-      <video id="video" autoplay playsinline class="mb-4"></video>
-      <canvas id="canvas" style="display:none;" class="mb-4"></canvas>
-      <input type="file" id="uploadInput" accept="image/*">
-  </div>
-
-
-  <div class="flex justify-center space-x-4 mb-6">
-      <button onclick="startCamera()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out">
-          Start Camera
-      </button>
-      <button onclick="capturePhoto()" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out">
-          Take Photo
-      </button>
-      <button onclick="triggerUpload()" class="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out">
-          Upload Photo
-      </button>
-  </div>
+    <div class="flex flex-col items-center">
+        <video id="video" autoplay playsinline class="mb-4"></video>
+        <canvas id="canvas" style="display:none;" class="mb-4"></canvas>
+        <input type="file" id="uploadInput" accept="image/*">
+    </div>
 
 
-  <h2 class="text-2xl font-semibold mb-4 text-gray-300">My List</h2>
-  <div id="whiskeyList" class="max-w-2xl mx-auto">
-      </div>
+    <div class="flex justify-center space-x-4 mb-6">
+        <button onclick="startCamera()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out">
+            Start Camera
+        </button>
+        <button onclick="capturePhoto()" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out">
+            Take Photo
+        </button>
+        <button onclick="triggerUpload()" class="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out">
+            Upload Photo
+        </button>
+    </div>
 
-  <script>
-    // --- SECURITY ---
-    // Use the Encryptor tool to generate this key.
-    // Paste the output from the encryptor tool here.
-    const ENCRYPTED_API_KEY = "U2FsdGVkX199x9Yx53vw2E12nMPpPn5VO0D8A0HeB6LqrN+TtpBNE5J3sZDHSKeH7lPgMITF6FgKCl1Rwr5Q2g==";
-    let decryptedApiKey = null; // This will hold the decrypted API key
 
-    // --- DOM ELEMENTS & GLOBAL VARS ---
-    let video = document.getElementById('video');
-    let canvas = document.getElementById('canvas');
-    let context = canvas.getContext('2d');
-    let uploadInput = document.getElementById('uploadInput');
-    let db; // IndexedDB database instance
-    let currentImageData = null; // Temporarily store the image data
+    <h2 class="text-2xl font-semibold mb-4 text-gray-300">My List</h2>
+    <div id="whiskeyList" class="max-w-2xl mx-auto">
+    </div>
 
-    // --- API KEY MANAGEMENT ---
-    function unlockApi() {
-        const passkey = document.getElementById('passkey').value;
-        const authStatus = document.getElementById('auth-status');
+    <script>
+        // --- SECURITY ---
+        // Use the Encryptor tool to generate this key.
+        // Paste the output from the encryptor tool here.
+        const ENCRYPTED_API_KEY = "U2FsdGVkX199x9Yx53vw2E12nMPpPn5VO0D8A0HeB6LqrN+TtpBNE5J3sZDHSKeH7lPgMITF6FgKCl1Rwr5Q2g==";
+        let decryptedApiKey = null; // This will hold the decrypted API key
 
-        if (!passkey) {
-            showMessageBox("Please enter a password.");
-            return;
-        }
-        if (ENCRYPTED_API_KEY === "PASTE_YOUR_ENCRYPTED_KEY_HERE") {
-            showMessageBox("Error: The encrypted API key has not been set in the code.");
-            authStatus.textContent = "Configuration Error!";
-            authStatus.className = 'text-sm mt-2 text-red-500';
-            return;
-        }
+        // --- DOM ELEMENTS & GLOBAL VARS ---
+        let video = document.getElementById('video');
+        let canvas = document.getElementById('canvas');
+        let context = canvas.getContext('2d');
+        let uploadInput = document.getElementById('uploadInput');
+        let db; // IndexedDB database instance
+        let currentImageData = null; // Temporarily store the image data
 
-        try {
-            // Decrypt the key using AES
-            const bytes = CryptoJS.AES.decrypt(ENCRYPTED_API_KEY, passkey);
-            const originalText = bytes.toString(CryptoJS.enc.Utf8);
+        // --- API KEY MANAGEMENT ---
+        /**
+         * Attempts to decrypt the API key and stores the password in local storage upon success.
+         */
+        function unlockApi() {
+            const passkey = document.getElementById('passkey').value;
+            const authStatus = document.getElementById('auth-status');
 
-            if (originalText) {
-                decryptedApiKey = originalText;
-                authStatus.textContent = 'App Unlocked!';
-                authStatus.className = 'text-sm mt-2 text-green-400';
-                // Hide the auth container after successful unlock
-                document.getElementById('auth-container').style.display = 'none';
-            } else {
-                // This case happens if the password is wrong, resulting in empty decrypted text
-                throw new Error("Decryption failed. Invalid password.");
+            if (!passkey) {
+                showMessageBox("Please enter a password.");
+                return;
             }
-        } catch (e) {
-            console.error("Decryption error:", e);
-            showMessageBox("Invalid password. Could not unlock the app.");
-            authStatus.textContent = 'Invalid Password!';
-            authStatus.className = 'text-sm mt-2 text-red-500';
-            decryptedApiKey = null; // Ensure key is null on failure
+
+            if (ENCRYPTED_API_KEY === "PASTE_YOUR_ENCRYPTED_KEY_HERE") {
+                showMessageBox("Error: The encrypted API key has not been set in the code.");
+                authStatus.textContent = "Configuration Error!";
+                authStatus.className = 'text-sm mt-2 text-red-500';
+                return;
+            }
+
+            try {
+                // Decrypt the key using AES
+                const bytes = CryptoJS.AES.decrypt(ENCRYPTED_API_KEY, passkey);
+                const originalText = bytes.toString(CryptoJS.enc.Utf8);
+
+                if (originalText) {
+                    decryptedApiKey = originalText;
+                    // Save the password to local storage so it persists across browser sessions
+                    localStorage.setItem('whiskeyPasskey', passkey);
+
+                    authStatus.textContent = 'App Unlocked!';
+                    authStatus.className = 'text-sm mt-2 text-green-400';
+                    // Hide the auth container after successful unlock
+                    document.getElementById('auth-container').style.display = 'none';
+                } else {
+                    // This case happens if the password is wrong, resulting in empty decrypted text
+                    throw new Error("Decryption failed. Invalid password.");
+                }
+            } catch (e) {
+                console.error("Decryption error:", e);
+                showMessageBox("Invalid password. Could not unlock the app.");
+                authStatus.textContent = 'Invalid Password!';
+                authStatus.className = 'text-sm mt-2 text-red-500';
+                decryptedApiKey = null; // Ensure key is null on failure
+            }
         }
-    }
+        
+        /**
+         * Decrypts the API key using a stored password.
+         * @param {string} passkey The password to use for decryption.
+         * @returns {boolean} True if decryption is successful, otherwise false.
+         */
+        function decryptAndSetKey(passkey) {
+             if (ENCRYPTED_API_KEY === "PASTE_YOUR_ENCRYPTED_KEY_HERE") {
+                console.error("Configuration Error: API key not set.");
+                return false;
+            }
 
-    // --- CAMERA & UPLOAD FUNCTIONS ---
-    async function startCamera() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' },
-          audio: false
-        });
-        video.srcObject = stream;
-        canvas.style.display = 'none';
-        video.style.display = 'block';
-        currentImageData = null;
-      } catch (e) {
-        showMessageBox('Camera access denied or not available.');
-        console.error("Camera access error:", e);
-      }
-    }
+            try {
+                const bytes = CryptoJS.AES.decrypt(ENCRYPTED_API_KEY, passkey);
+                const originalText = bytes.toString(CryptoJS.enc.Utf8);
+                if (originalText) {
+                    decryptedApiKey = originalText;
+                    return true;
+                }
+            } catch (e) {
+                console.error("Decryption failed with stored password:", e);
+            }
+            return false;
+        }
 
-    function capturePhoto() {
-      canvas.style.display = 'block';
-      video.style.display = 'none';
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      if (video.srcObject) {
-        const stream = video.srcObject;
-        const tracks = stream.getTracks();
-        tracks.forEach(track => track.stop());
-        video.srcObject = null;
-      }
-      currentImageData = canvas.toDataURL('image/png');
-      identifyWhiskey();
-    }
+        // --- CAMERA & UPLOAD FUNCTIONS ---
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' },
+                    audio: false
+                });
+                video.srcObject = stream;
+                canvas.style.display = 'none';
+                video.style.display = 'block';
+                currentImageData = null;
+            } catch (e) {
+                showMessageBox('Camera access denied or not available.');
+                console.error("Camera access error:", e);
+            }
+        }
 
-    function triggerUpload() {
-      uploadInput.click();
-    }
-
-    uploadInput.addEventListener('change', function(event) {
-      const file = event.target.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-          const img = new Image();
-          img.onload = function() {
+        function capturePhoto() {
             canvas.style.display = 'block';
             video.style.display = 'none';
-            canvas.width = img.width;
-            canvas.height = img.height;
-            context.drawImage(img, 0, 0, canvas.width, canvas.height);
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            if (video.srcObject) {
+                const stream = video.srcObject;
+                const tracks = stream.getTracks();
+                tracks.forEach(track => track.stop());
+                video.srcObject = null;
+            }
             currentImageData = canvas.toDataURL('image/png');
             identifyWhiskey();
-          }
-          img.src = e.target.result;
-        }
-        reader.readAsDataURL(file);
-      }
-    });
-
-    // --- API CALL & DATA PROCESSING ---
-    async function identifyWhiskey() {
-      // SECURITY CHECK: Ensure the API key has been decrypted
-      if (!decryptedApiKey) {
-        showMessageBox("Please unlock the app with your password first.");
-        // Scroll to the auth container to make it visible
-        document.getElementById('auth-container').scrollIntoView({ behavior: 'smooth' });
-        return;
-      }
-
-      if (!currentImageData) {
-        console.error("No image data available for identification.");
-        document.getElementById('whiskeyList').innerHTML = '<p class="text-red-400">Error: No image data available.</p>';
-        return;
-      }
-
-      const base64Image = currentImageData.split(',')[1];
-      document.getElementById('whiskeyList').innerHTML = '<p class="text-gray-300">Identifying whiskey...</p>';
-      
-      const API_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${decryptedApiKey}`;
-
-      try {
-        const response = await fetch(API_ENDPOINT, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                { text: "Identify this whiskey. Provide its name, general composition (ingredients and flavor characteristics), and estimated price in US dollars. Return the information in JSON format." },
-                { inlineData: { mime_type: 'image/png', data: base64Image } }
-              ]
-            }]
-          })
-        });
-
-        if (!response.ok) {
-          let errorDetails = 'Unknown error';
-          try {
-            const errorResponse = await response.json();
-            errorDetails = errorResponse.error ? (errorResponse.error.message || JSON.stringify(errorResponse)) : JSON.stringify(errorResponse);
-          } catch (jsonError) {
-            errorDetails = await response.text();
-          }
-          console.error('HTTP error!', response.status, errorDetails);
-          document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error identifying whiskey: ${response.status} - ${errorDetails.substring(0, 200)}...</p>`;
-          return;
         }
 
-        const result = await response.json();
-
-        if (!result.candidates || !result.candidates[0] || !result.candidates[0].content || !result.candidates[0].content.parts) {
-          console.error("Unexpected API response structure:", result);
-          document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error: Unexpected response format from AI model.</p>`;
-          return;
+        function triggerUpload() {
+            uploadInput.click();
         }
 
-        const rawText = result.candidates[0].content.parts.map(part => part.text).join('');
-        let data;
-        try {
-          const jsonString = rawText.replace(/```json\n?|```/g, '').trim();
-          data = JSON.parse(jsonString);
-        } catch (jsonError) {
-          console.error("JSON Parsing Error:", jsonError);
-          console.log("Raw text from API:", rawText);
-          document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error: Failed to parse whiskey data from AI model response. Raw text: ${rawText.substring(0, 200)}...</p>`;
-          return;
-        }
-        displayWhiskeyInfo(data);
-      } catch (error) {
-        console.error('Error identifying whiskey:', error);
-        document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error identifying whiskey: ${error.message}</p>`;
-      }
-    }
-
-    function displayWhiskeyInfo(data) {
-      const whiskeyList = document.getElementById('whiskeyList');
-      whiskeyList.innerHTML = ''; // Clear previous results
-
-      const whiskeyInfo = document.createElement('div');
-      const name = String(data.name || 'Unknown Whiskey');
-      const estimated_price = String(data.estimated_price || 'N/A');
-      let composition = 'No composition available.';
-
-      if (typeof data.composition === 'object' && data.composition !== null) {
-          composition = `Ingredients: ${data.composition.ingredients || 'N/A'}. Flavor: ${data.composition.flavor_characteristics || 'N/A'}`;
-      } else if (typeof data.composition === 'string') {
-          composition = data.composition;
-      }
-
-      whiskeyInfo.innerHTML = `
-        <div class="text-content">
-            <h3 class="text-xl font-semibold mb-2">${escapeHtml(name)}</h3>
-            <p class="text-gray-400 mb-2"><strong>Composition:</strong> ${escapeHtml(composition)}</p>
-            <p class="text-gray-400 mb-4"><strong>Estimated Price:</strong> $${escapeHtml(estimated_price)}</p>
-        </div>`;
-
-      const addButton = document.createElement('button');
-      addButton.textContent = 'Add to My List';
-      addButton.className = 'mt-4 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out text-sm';
-      addButton.onclick = () => addToMyList(name, composition, estimated_price);
-      
-      const textContentDiv = whiskeyInfo.querySelector('.text-content');
-      textContentDiv.appendChild(addButton);
-
-      whiskeyList.appendChild(whiskeyInfo);
-    }
-
-    // --- DATABASE (IndexedDB) FUNCTIONS ---
-    function initDatabase() {
-      const request = indexedDB.open('WhiskeyDB', 1);
-      request.onupgradeneeded = function(event) {
-        db = event.target.result;
-        if (!db.objectStoreNames.contains('whiskeys')) {
-          db.createObjectStore('whiskeys', { keyPath: 'id', autoIncrement: true });
-        }
-      };
-      request.onsuccess = function(event) {
-        db = event.target.result;
-        displaySavedWhiskeys();
-      };
-      request.onerror = function(event) {
-        console.error('Database error:', event.target.errorCode);
-      };
-    }
-
-    function addToMyList(name, composition, estimated_price) {
-      const imageDataToSave = currentImageData;
-      const transaction = db.transaction(['whiskeys'], 'readwrite');
-      const store = transaction.objectStore('whiskeys');
-      const whiskey = {
-        name: name,
-        description: composition,
-        price: estimated_price,
-        notes: '',
-        image: imageDataToSave
-      };
-      const request = store.add(whiskey);
-      request.onsuccess = function() {
-        displaySavedWhiskeys();
-        currentImageData = null; // Clear temp image
-      };
-      request.onerror = function(event) {
-        console.error("Error adding whiskey:", event.target.error);
-      };
-    }
-
-    function displaySavedWhiskeys() {
-      const transaction = db.transaction(['whiskeys'], 'readonly');
-      const store = transaction.objectStore('whiskeys');
-      const whiskeyList = document.getElementById('whiskeyList');
-      whiskeyList.innerHTML = '';
-
-      store.openCursor().onsuccess = function(event) {
-        const cursor = event.target.result;
-        if (cursor) {
-          const whiskey = cursor.value;
-          const listItem = document.createElement('div');
-          listItem.setAttribute('data-key', cursor.key);
-
-          listItem.innerHTML = `
-            <button class="delete-button" onclick="deleteWhiskey(${cursor.key})">&times;</button>
-            ${whiskey.image ? `<img src="${escapeHtml(whiskey.image)}" class="saved-whiskey-image" alt="Whiskey Image">` : ''}
-            <div class="text-content">
-                <label for="name-${cursor.key}" class="block text-sm font-medium text-gray-400">Name:</label>
-                <input type="text" id="name-${cursor.key}" class="editable-field text-lg font-semibold" value="${escapeHtml(whiskey.name)}">
-
-                <label for="composition-${cursor.key}" class="block text-sm font-medium text-gray-400 mt-2">Composition:</label>
-                <textarea id="composition-${cursor.key}" class="w-full p-2 mt-1">${escapeHtml(whiskey.description)}</textarea>
-
-                <label for="price-${cursor.key}" class="block text-sm font-medium text-gray-400 mt-2">Price:</label>
-                <input type="text" id="price-${cursor.key}" class="editable-field" value="${escapeHtml(whiskey.price)}">
-
-                <label for="notes-${cursor.key}" class="block text-sm font-medium text-gray-400 mt-2">Notes:</label>
-                <textarea id="notes-${cursor.key}" placeholder="Add your notes here..." class="w-full p-2 mt-1">${escapeHtml(whiskey.notes)}</textarea>
-
-                <button onclick="saveWhiskeyEdit(${cursor.key})"
-                    class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
-                    Save Changes
-                </button>
-            </div>`;
-          whiskeyList.appendChild(listItem);
-          cursor.continue();
-        }
-      };
-    }
-
-    // FIX: Correctly implemented save logic
-    function saveWhiskeyEdit(key) {
-      const transaction = db.transaction(['whiskeys'], 'readwrite');
-      const store = transaction.objectStore('whiskeys');
-      const getRequest = store.get(key);
-
-      getRequest.onsuccess = function(event) {
-        const whiskey = event.target.result;
-        if (whiskey) {
-          // Get the updated values from the input fields, unescaping them first
-          whiskey.name = unescapeHtml(document.getElementById(`name-${key}`).value);
-          whiskey.description = unescapeHtml(document.getElementById(`composition-${key}`).value);
-          whiskey.price = unescapeHtml(document.getElementById(`price-${key}`).value);
-          whiskey.notes = unescapeHtml(document.getElementById(`notes-${key}`).value);
-          
-          // Put the updated object back into the store
-          const putRequest = store.put(whiskey);
-
-          putRequest.onsuccess = function() {
-              console.log("Whiskey updated successfully!");
-              // Provide a non-disruptive visual confirmation instead of an alert
-              const saveButton = document.querySelector(`div[data-key='${key}'] button[onclick^='saveWhiskeyEdit']`);
-              if(saveButton) {
-                  const originalText = saveButton.textContent;
-                  saveButton.textContent = 'Saved!';
-                  saveButton.classList.remove('bg-blue-600', 'hover:bg-blue-700');
-                  saveButton.classList.add('bg-green-600');
-                  setTimeout(() => {
-                      saveButton.textContent = originalText;
-                      saveButton.classList.remove('bg-green-600');
-                      saveButton.classList.add('bg-blue-600', 'hover:bg-blue-700');
-                  }, 2000); // Revert back after 2 seconds
-              }
-          };
-
-          putRequest.onerror = function(event) {
-              console.error("Error updating whiskey:", event.target.error);
-              showMessageBox("Error saving changes.");
-          };
-        }
-      };
-    }
-
-    function deleteWhiskey(key) {
-      const transaction = db.transaction(['whiskeys'], 'readwrite');
-      const store = transaction.objectStore('whiskeys');
-      const deleteRequest = store.delete(key);
-      deleteRequest.onsuccess = () => displaySavedWhiskeys();
-    }
-
-    // --- UTILITY FUNCTIONS ---
-    function escapeHtml(str) {
-      if (typeof str !== 'string') return str;
-      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-    }
-
-    // FIX: Added unescape function to handle saved text correctly
-    function unescapeHtml(str) {
-        if (typeof str !== 'string') return str;
-        return str.replace(/&amp;/g, "&")
-                  .replace(/&lt;/g, "<")
-                  .replace(/&gt;/g, ">")
-                  .replace(/&quot;/g, '"')
-                  .replace(/&#039;/g, "'");
-    }
-
-    function showMessageBox(message) {
-      alert(message);
-    }
-
-    // --- INITIALIZATION ---
-    // FIX: Added event listener for 'Enter' key on password field
-    window.onload = function() {
-        initDatabase();
-        document.getElementById('passkey').addEventListener('keyup', function(event) {
-            if (event.key === 'Enter') {
-                event.preventDefault(); // Prevent form submission if it were in a form
-                unlockApi();
+        uploadInput.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = new Image();
+                    img.onload = function() {
+                        canvas.style.display = 'block';
+                        video.style.display = 'none';
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        context.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        currentImageData = canvas.toDataURL('image/png');
+                        identifyWhiskey();
+                    }
+                    img.src = e.target.result;
+                }
+                reader.readAsDataURL(file);
             }
         });
-    };
-  </script>
 
+        // --- API CALL & DATA PROCESSING ---
+        async function identifyWhiskey() {
+            // SECURITY CHECK: Ensure the API key has been decrypted or retrieved from storage
+            if (!decryptedApiKey) {
+                showMessageBox("Please unlock the app with your password first.");
+                // Scroll to the auth container to make it visible
+                document.getElementById('auth-container').scrollIntoView({ behavior: 'smooth' });
+                return;
+            }
+
+            if (!currentImageData) {
+                console.error("No image data available for identification.");
+                document.getElementById('whiskeyList').innerHTML = '<p class="text-red-400">Error: No image data available.</p>';
+                return;
+            }
+
+            const base64Image = currentImageData.split(',')[1];
+            document.getElementById('whiskeyList').innerHTML = '<p class="text-gray-300">Identifying whiskey...</p>';
+            
+            // Use the decrypted key from the global variable
+            const API_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${decryptedApiKey}`;
+
+            try {
+                const response = await fetch(API_ENDPOINT, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [
+                                { text: "Identify this whiskey. Provide its name, general composition (ingredients and flavor characteristics), and estimated price in US dollars. Return the information in JSON format." },
+                                { inlineData: { mime_type: 'image/png', data: base64Image } }
+                            ]
+                        }]
+                    })
+                });
+
+                if (!response.ok) {
+                    let errorDetails = 'Unknown error';
+                    try {
+                        const errorResponse = await response.json();
+                        errorDetails = errorResponse.error ? (errorResponse.error.message || JSON.stringify(errorResponse)) : JSON.stringify(errorResponse);
+                    } catch (jsonError) {
+                        errorDetails = await response.text();
+                    }
+                    console.error('HTTP error!', response.status, errorDetails);
+                    document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error identifying whiskey: ${response.status} - ${errorDetails.substring(0, 200)}...</p>`;
+                    return;
+                }
+
+                const result = await response.json();
+
+                if (!result.candidates || !result.candidates[0] || !result.candidates[0].content || !result.candidates[0].content.parts) {
+                    console.error("Unexpected API response structure:", result);
+                    document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error: Unexpected response format from AI model.</p>`;
+                    return;
+                }
+
+                const rawText = result.candidates[0].content.parts.map(part => part.text).join('');
+                let data;
+                try {
+                    const jsonString = rawText.replace(/```json\n?|```/g, '').trim();
+                    data = JSON.parse(jsonString);
+                } catch (jsonError) {
+                    console.error("JSON Parsing Error:", jsonError);
+                    console.log("Raw text from API:", rawText);
+                    document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error: Failed to parse whiskey data from AI model response. Raw text: ${rawText.substring(0, 200)}...</p>`;
+                    return;
+                }
+                displayWhiskeyInfo(data);
+            } catch (error) {
+                console.error('Error identifying whiskey:', error);
+                document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error identifying whiskey: ${error.message}</p>`;
+            }
+        }
+
+        function displayWhiskeyInfo(data) {
+            const whiskeyList = document.getElementById('whiskeyList');
+            whiskeyList.innerHTML = ''; // Clear previous results
+
+            const whiskeyInfo = document.createElement('div');
+            const name = String(data.name || 'Unknown Whiskey');
+            const estimated_price = String(data.estimated_price || 'N/A');
+            let composition = 'No composition available.';
+
+            if (typeof data.composition === 'object' && data.composition !== null) {
+                composition = `Ingredients: ${data.composition.ingredients || 'N/A'}. Flavor: ${data.composition.flavor_characteristics || 'N/A'}`;
+            } else if (typeof data.composition === 'string') {
+                composition = data.composition;
+            }
+
+            whiskeyInfo.innerHTML = `
+                <div class="text-content">
+                    <h3 class="text-xl font-semibold mb-2">${escapeHtml(name)}</h3>
+                    <p class="text-gray-400 mb-2"><strong>Composition:</strong> ${escapeHtml(composition)}</p>
+                    <p class="text-gray-400 mb-4"><strong>Estimated Price:</strong> $${escapeHtml(estimated_price)}</p>
+                </div>`;
+
+            const addButton = document.createElement('button');
+            addButton.textContent = 'Add to My List';
+            addButton.className = 'mt-4 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out text-sm';
+            addButton.onclick = () => addToMyList(name, composition, estimated_price);
+            
+            const textContentDiv = whiskeyInfo.querySelector('.text-content');
+            textContentDiv.appendChild(addButton);
+
+            whiskeyList.appendChild(whiskeyInfo);
+        }
+
+        // --- DATABASE (IndexedDB) FUNCTIONS ---
+        function initDatabase() {
+            const request = indexedDB.open('WhiskeyDB', 1);
+            request.onupgradeneeded = function(event) {
+                db = event.target.result;
+                if (!db.objectStoreNames.contains('whiskeys')) {
+                    db.createObjectStore('whiskeys', { keyPath: 'id', autoIncrement: true });
+                }
+            };
+            request.onsuccess = function(event) {
+                db = event.target.result;
+                displaySavedWhiskeys();
+            };
+            request.onerror = function(event) {
+                console.error('Database error:', event.target.errorCode);
+            };
+        }
+
+        function addToMyList(name, composition, estimated_price) {
+            const imageDataToSave = currentImageData;
+            const transaction = db.transaction(['whiskeys'], 'readwrite');
+            const store = transaction.objectStore('whiskeys');
+            const whiskey = {
+                name: name,
+                description: composition,
+                price: estimated_price,
+                notes: '',
+                image: imageDataToSave
+            };
+            const request = store.add(whiskey);
+            request.onsuccess = function() {
+                displaySavedWhiskeys();
+                currentImageData = null; // Clear temp image
+            };
+            request.onerror = function(event) {
+                console.error("Error adding whiskey:", event.target.error);
+            };
+        }
+
+        function displaySavedWhiskeys() {
+            const transaction = db.transaction(['whiskeys'], 'readonly');
+            const store = transaction.objectStore('whiskeys');
+            const whiskeyList = document.getElementById('whiskeyList');
+            whiskeyList.innerHTML = '';
+
+            store.openCursor().onsuccess = function(event) {
+                const cursor = event.target.result;
+                if (cursor) {
+                    const whiskey = cursor.value;
+                    const listItem = document.createElement('div');
+                    listItem.setAttribute('data-key', cursor.key);
+
+                    listItem.innerHTML = `
+                        <button class="delete-button" onclick="deleteWhiskey(${cursor.key})">&times;</button>
+                        ${whiskey.image ? `<img src="${escapeHtml(whiskey.image)}" class="saved-whiskey-image" alt="Whiskey Image">` : ''}
+                        <div class="text-content">
+                            <label for="name-${cursor.key}" class="block text-sm font-medium text-gray-400">Name:</label>
+                            <input type="text" id="name-${cursor.key}" class="editable-field text-lg font-semibold" value="${escapeHtml(whiskey.name)}">
+
+                            <label for="composition-${cursor.key}" class="block text-sm font-medium text-gray-400 mt-2">Composition:</label>
+                            <textarea id="composition-${cursor.key}" class="w-full p-2 mt-1">${escapeHtml(whiskey.description)}</textarea>
+
+                            <label for="price-${cursor.key}" class="block text-sm font-medium text-gray-400 mt-2">Price:</label>
+                            <input type="text" id="price-${cursor.key}" class="editable-field" value="${escapeHtml(whiskey.price)}">
+
+                            <label for="notes-${cursor.key}" class="block text-sm font-medium text-gray-400 mt-2">Notes:</label>
+                            <textarea id="notes-${cursor.key}" placeholder="Add your notes here..." class="w-full p-2 mt-1">${escapeHtml(whiskey.notes)}</textarea>
+
+                            <button onclick="saveWhiskeyEdit(${cursor.key})"
+                                class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
+                                Save Changes
+                            </button>
+                        </div>`;
+                    whiskeyList.appendChild(listItem);
+                    cursor.continue();
+                }
+            };
+        }
+
+        // FIX: Correctly implemented save logic
+        function saveWhiskeyEdit(key) {
+            const transaction = db.transaction(['whiskeys'], 'readwrite');
+            const store = transaction.objectStore('whiskeys');
+            const getRequest = store.get(key);
+
+            getRequest.onsuccess = function(event) {
+                const whiskey = event.target.result;
+                if (whiskey) {
+                    // Get the updated values from the input fields, unescaping them first
+                    whiskey.name = unescapeHtml(document.getElementById(`name-${key}`).value);
+                    whiskey.description = unescapeHtml(document.getElementById(`composition-${key}`).value);
+                    whiskey.price = unescapeHtml(document.getElementById(`price-${key}`).value);
+                    whiskey.notes = unescapeHtml(document.getElementById(`notes-${key}`).value);
+                    
+                    // Put the updated object back into the store
+                    const putRequest = store.put(whiskey);
+
+                    putRequest.onsuccess = function() {
+                        console.log("Whiskey updated successfully!");
+                        // Provide a non-disruptive visual confirmation instead of an alert
+                        const saveButton = document.querySelector(`div[data-key='${key}'] button[onclick^='saveWhiskeyEdit']`);
+                        if(saveButton) {
+                            const originalText = saveButton.textContent;
+                            saveButton.textContent = 'Saved!';
+                            saveButton.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+                            saveButton.classList.add('bg-green-600');
+                            setTimeout(() => {
+                                saveButton.textContent = originalText;
+                                saveButton.classList.remove('bg-green-600');
+                                saveButton.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                            }, 2000); // Revert back after 2 seconds
+                        }
+                    };
+
+                    putRequest.onerror = function(event) {
+                        console.error("Error updating whiskey:", event.target.error);
+                        showMessageBox("Error saving changes.");
+                    };
+                }
+            };
+        }
+
+        function deleteWhiskey(key) {
+            const transaction = db.transaction(['whiskeys'], 'readwrite');
+            const store = transaction.objectStore('whiskeys');
+            const deleteRequest = store.delete(key);
+            deleteRequest.onsuccess = () => displaySavedWhiskeys();
+        }
+
+        // --- UTILITY FUNCTIONS ---
+        function escapeHtml(str) {
+            if (typeof str !== 'string') return str;
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        // FIX: Added unescape function to handle saved text correctly
+        function unescapeHtml(str) {
+            if (typeof str !== 'string') return str;
+            return str.replace(/&amp;/g, "&")
+                      .replace(/&lt;/g, "<")
+                      .replace(/&gt;/g, ">")
+                      .replace(/&quot;/g, '"')
+                      .replace(/&#039;/g, "'");
+        }
+
+        // Custom modal message box functions
+        function showMessageBox(message) {
+            const modal = document.getElementById('message-modal');
+            const modalMessage = document.getElementById('modal-message');
+            modalMessage.textContent = message;
+            modal.classList.remove('hidden');
+        }
+
+        function hideMessageBox() {
+            const modal = document.getElementById('message-modal');
+            modal.classList.add('hidden');
+        }
+
+        // --- INITIALIZATION ---
+        /**
+         * Checks for a saved password in local storage on page load and initializes the app.
+         */
+        function initializeApp() {
+            // First, check if a password is already in local storage.
+            const savedPasskey = localStorage.getItem('whiskeyPasskey');
+            if (savedPasskey && decryptAndSetKey(savedPasskey)) {
+                document.getElementById('auth-status').textContent = 'App Unlocked!';
+                document.getElementById('auth-status').className = 'text-sm mt-2 text-green-400';
+                document.getElementById('auth-container').style.display = 'none';
+            } else {
+                // If no key is found or decryption fails, wait for user input
+                document.getElementById('passkey').addEventListener('keyup', function(event) {
+                    if (event.key === 'Enter') {
+                        event.preventDefault(); // Prevent form submission if it were in a form
+                        unlockApi();
+                    }
+                });
+            }
+            initDatabase();
+        }
+
+        window.onload = initializeApp;
+    </script>
 </body>
 </html>
