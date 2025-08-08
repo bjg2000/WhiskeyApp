@@ -141,6 +141,10 @@
       <input type="file" id="uploadInput" accept="image/*">
   </div>
 
+  <div class="flex justify-center items-center space-x-4 mb-6">
+    <input type="text" id="textInput" placeholder="Enter whiskey name" class="bg-gray-700 border border-gray-600 rounded-lg p-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 w-full max-w-md">
+    <button id="identifyTextButton" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out">Identify from Text</button>
+  </div>
 
   <div class="flex justify-center space-x-4 mb-6">
       <button onclick="startCamera()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out">
@@ -151,13 +155,18 @@
       </button>
       <button onclick="triggerUpload()" class="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out">
           Upload Photo
-      </button>
-  </div>
-
+ <input type="file" id="addPhotoInput" accept="image/*" style="display: none;">
+</div>
+  
 
   <h2 class="text-2xl font-semibold mb-4 text-gray-300">My List</h2>
-  <div id="whiskeyList" class="max-w-2xl mx-auto">
-      </div>
+  <div class="max-w-2xl mx-auto mb-6">
+      <label for="searchInput" class="block mb-2 font-medium text-gray-300">Search My Bar:</label>
+      <input type="text" id="searchInput" placeholder="Enter whiskey name to search" class="bg-gray-700 border border-gray-600 rounded-lg p-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 w-full">
+  </div>
+
+  <div id="savedWhiskeysDiv" class="max-w-2xl mx-auto">
+  </div>
 
   <script>
     // --- SECURITY ---
@@ -172,7 +181,10 @@
     let context = canvas.getContext('2d');
     let uploadInput = document.getElementById('uploadInput');
     let db; // IndexedDB database instance
+    let textInput = document.getElementById('textInput');
     let currentImageData = null; // Temporarily store the image data
+    let savedWhiskeys = []; // Array to store saved whiskey data for filtering
+
 
     // --- API KEY MANAGEMENT ---
     function unlockApi() {
@@ -273,8 +285,15 @@
       }
     });
 
-    // --- API CALL & DATA PROCESSING ---
+    // Disable identify button by default
+    document.getElementById('identifyButton').disabled = true;
+
+    // Event listener for file input change
+    uploadInput.addEventListener('change', function(event) {
+        document.getElementById('identifyButton').disabled = !event.target.files.length;
+    });
     async function identifyWhiskey() {
+      // Check if API key is decrypted
       // SECURITY CHECK: Ensure the API key has been decrypted
       if (!decryptedApiKey) {
         showMessageBox("Please unlock the app with your password first.");
@@ -282,16 +301,58 @@
         document.getElementById('auth-container').scrollIntoView({ behavior: 'smooth' });
         return;
       }
-
+      
       if (!currentImageData) {
-        console.error("No image data available for identification.");
+        console.error("No image data or text input available for identification.");
         document.getElementById('whiskeyList').innerHTML = '<p class="text-red-400">Error: No image data available.</p>';
-        return;
+ return;
       }
 
       const base64Image = currentImageData.split(',')[1];
       document.getElementById('whiskeyList').innerHTML = '<p class="text-gray-300">Identifying whiskey...</p>';
-      
+
+      const parts = [];
+      parts.push({ text: "Identify this whiskey from the image. Provide its name, general composition (ingredients and flavor characteristics), and estimated price in US dollars. If the exact MSRP is not known, provide an estimated price range (e.g., ~80-90 USD) and note that it is an estimate. Return the information in JSON format." }, { inlineData: { mime_type: 'image/png', data: base64Image } });
+
+      const API_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${decryptedApiKey}`
+
+      try {
+        const response = await fetch(API_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: parts
+            }]
+          })
+        });
+
+        if (!response.ok) {
+          let errorDetails = 'Unknown error';
+          try {
+            const errorResponse = await response.json();
+            errorDetails = errorResponse.error ? (errorResponse.error.message || JSON.stringify(errorResponse)) : JSON.stringify(errorResponse);
+          } catch (jsonError) {
+            errorDetails = await response.text();
+          }
+          console.error('HTTP error!', response.status, errorDetails);
+          document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error identifying whiskey: ${response.status} - ${errorDetails.substring(0, 200)}...</p>`;
+          return;
+        }
+
+        const result = await response.json();
+
+        if (!result.candidates || !result.candidates[0] || !result.candidates[0].content || !result.candidates[0].content.parts) {
+          console.error("Unexpected API response structure:", result);
+          document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error: Unexpected response format from AI model.</p>`;
+          return;
+        }
+
+        const rawText = result.candidates[0].content.parts.map(part => part.text).join('');
+        let data;
+        try {
+ const jsonString = rawText.replace(/
+
       const API_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${decryptedApiKey}`;
 
       try {
@@ -300,10 +361,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{
-              parts: [
-                { text: "Identify this whiskey. Provide its name, general composition (ingredients and flavor characteristics), and estimated price in US dollars. Return the information in JSON format." },
-                { inlineData: { mime_type: 'image/png', data: base64Image } }
-              ]
+              parts: parts
             }]
           })
         });
@@ -347,6 +405,65 @@
       }
     }
 
+    async function identifyWhiskeyFromText() {
+        // Check if API key is decrypted
+        if (!decryptedApiKey) {
+            showMessageBox("Please unlock the app with your password first.");
+            // Scroll to the auth container to make it visible
+            document.getElementById('auth-container').scrollIntoView({ behavior: 'smooth' });
+            return;
+        }
+
+        const whiskeyName = textInput.value.trim();
+        if (!whiskeyName) {
+            showMessageBox("Please enter a whiskey name in the text box.");
+            return;
+        }
+
+        document.getElementById('whiskeyList').innerHTML = '<p class="text-gray-300">Identifying whiskey from text...</p>';
+        currentImageData = null; // Clear any previous image data
+
+        const parts = [];
+        parts.push({ text: `Identify the whiskey named "${whiskeyName}". Provide its general composition (ingredients and flavor characteristics), and estimated price in US dollars. If the exact MSRP is not known, provide an estimated price range (e.g., ~80-90 USD) and note that it is an estimate. Return the information in JSON format with keys: name, composition, and estimated_price.` });
+
+        const API_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${decryptedApiKey}`;
+
+        try {
+            const response = await fetch(API_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: parts
+                    }]
+                })
+            });
+
+            if (!response.ok) {
+                let errorDetails = 'Unknown error';
+                try {
+                    const errorResponse = await response.json();
+                    errorDetails = errorResponse.error ? (errorResponse.error.message || JSON.stringify(errorResponse)) : JSON.stringify(errorResponse);
+                } catch (jsonError) {
+                    errorDetails = await response.text();
+                }
+                console.error('HTTP error!', response.status, errorDetails);
+                document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error identifying whiskey: ${response.status} - ${errorDetails.substring(0, 200)}...</p>`;
+                return;
+            }
+
+            const result = await response.json();
+
+            if (!result.candidates || !result.candidates[0] || !result.candidates[0].content || !result.candidates[0].content.parts) {
+                console.error("Unexpected API response structure:", result);
+                document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error: Unexpected response format from AI model.</p>`;
+                return;
+            }
+
+            const rawText = result.candidates[0].content.parts.map(part => part.text).join('');
+            let data;
+            try {
+                const jsonString = rawText.replace(/
     function displayWhiskeyInfo(data) {
       const whiskeyList = document.getElementById('whiskeyList');
       whiskeyList.innerHTML = ''; // Clear previous results
@@ -431,6 +548,7 @@
           const whiskey = cursor.value;
           const listItem = document.createElement('div');
           listItem.setAttribute('data-key', cursor.key);
+          const identifiedBy = whiskey.identifiedBy || 'image'; // Default to 'image' for older entries
 
           listItem.innerHTML = `
             <button class="delete-button" onclick="deleteWhiskey(${cursor.key})">&times;</button>
@@ -452,6 +570,24 @@
                     class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
                     Save Changes
                 </button>
+                ${identifiedBy === 'image' ? `
+                <button onclick="deleteWhiskeyPhoto(${cursor.key})"
+                    class="mt-4 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg text-sm ml-2">
+                    Delete Photo
+                </button>
+                <button onclick="replaceWhiskeyPhoto(${cursor.key})"
+                    class="mt-4 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg text-sm ml-2">
+                    Replace Photo
+                </button>
+                ` : `
+                <button onclick="addPhotoToWhiskey(${cursor.key})"
+                    class="mt-4 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
+                    Add Photo
+                </button>
+                `}
+                <input type="file" id="replacePhotoInput-${cursor.key}" accept="image/*" style="display: none;" onchange="handleReplacePhotoChange(event, ${cursor.key})">
+                <input type="file" id="addPhotoInput-${cursor.key}" accept="image/*" style="display: none;" onchange="handleAddPhotoChange(event, ${cursor.key})">
+                </button>
             </div>`;
           whiskeyList.appendChild(listItem);
           cursor.continue();
@@ -459,7 +595,6 @@
       };
     }
 
-    // FIX: Correctly implemented save logic
     function saveWhiskeyEdit(key) {
       const transaction = db.transaction(['whiskeys'], 'readwrite');
       const store = transaction.objectStore('whiskeys');
@@ -509,7 +644,6 @@
       deleteRequest.onsuccess = () => displaySavedWhiskeys();
     }
 
-    // --- UTILITY FUNCTIONS ---
     function escapeHtml(str) {
       if (typeof str !== 'string') return str;
       return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
@@ -530,7 +664,6 @@
     }
 
     // --- INITIALIZATION ---
-    // FIX: Added event listener for 'Enter' key on password field
     window.onload = function() {
         initDatabase();
         document.getElementById('passkey').addEventListener('keyup', function(event) {
@@ -540,6 +673,55 @@
             }
         });
     };
+
+    function addPhotoToWhiskey(key) {
+        const addPhotoInput = document.getElementById('addPhotoInput');
+        addPhotoInput.setAttribute('data-key', key); // Store the key on the input
+        addPhotoInput.click();
+    }
+
+    document.getElementById('addPhotoInput').addEventListener('change', function(event) {
+        const file = event.target.files[0];
+        const key = parseInt(event.target.getAttribute('data-key'), 10);
+
+        if (file && !isNaN(key)) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const imageData = e.target.result;
+                updateWhiskeyWithPhoto(key, imageData);
+            }
+            reader.readAsDataURL(file);
+        }
+    });
+
+    function updateWhiskeyWithPhoto(key, imageData) {
+        const transaction = db.transaction(['whiskeys'], 'readwrite');
+        const store = transaction.objectStore('whiskeys');
+        const getRequest = store.get(key);
+
+        getRequest.onsuccess = function(event) {
+            const whiskey = event.target.result;
+            if (whiskey) {
+                whiskey.image = imageData;
+                // Optionally update identifiedBy if you want to track this change
+                // whiskey.identifiedBy = 'image';
+
+                const putRequest = store.put(whiskey);
+
+                putRequest.onsuccess = function() {
+                    console.log(`Photo added to whiskey with key ${key}`);
+                    displaySavedWhiskeys(); // Re-render the list to show the photo
+                };
+
+                putRequest.onerror = function(event) {
+                    console.error("Error updating whiskey with photo:", event.target.error);
+                    showMessageBox("Error adding photo.");
+                };
+            }
+        };
+    }
+
+
   </script>
 
 </body>
