@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Key Encryptor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200 flex items-center justify-center min-h-screen">
+
+    <div class="w-full max-w-md p-8 space-y-6 bg-gray-800 rounded-2xl shadow-lg">
+        <h1 class="text-3xl font-bold text-center text-white">API Key Encryptor</h1>
+        <p class="text-center text-gray-400">Use this tool to encrypt your API key with a password. The output can be safely stored in your client-side code.</p>
+
+        <div class="space-y-4">
+            <div>
+                <label for="apiKeyInput" class="block text-sm font-medium text-gray-300 mb-1">API Key</label>
+                <input type="password" id="apiKeyInput" class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Paste your secret API key here">
+            </div>
+            <div>
+                <label for="passkeyInput" class="block text-sm font-medium text-gray-300 mb-1">Password</label>
+                <input type="text" id="passkeyInput" value="ontherocks" class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter your password">
+            </div>
+        </div>
+
+        <button onclick="encryptApiKey()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out">
+            Encrypt Key
+        </button>
+
+        <div id="outputContainer" class="hidden mt-6">
+            <label for="encryptedOutput" class="block text-sm font-medium text-gray-300 mb-1">Encrypted Key</label>
+            <textarea id="encryptedOutput" readonly class="w-full h-32 px-4 py-2 bg-gray-900 border border-gray-600 rounded-lg text-green-400 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-green-500"></textarea>
+            <button onclick="copyToClipboard()" class="w-full mt-2 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out">
+                Copy to Clipboard
+            </button>
+            <p id="copy-feedback" class="text-center text-sm mt-2 text-gray-400"></p>
+        </div>
+    </div>
+
+    <script>
+        // Encrypts the API key using the provided passkey with AES encryption.
+        function encryptApiKey() {
+            const apiKey = document.getElementById('apiKeyInput').value;
+            const passkey = document.getElementById('passkeyInput').value;
+            const copyFeedback = document.getElementById('copy-feedback');
+
+            if (!apiKey || !passkey) {
+                alert("Please provide both an API key and a password.");
+                return;
+            }
+
+            // Encrypt the API key using AES
+            const encrypted = CryptoJS.AES.encrypt(apiKey, passkey).toString();
+
+            const outputContainer = document.getElementById('outputContainer');
+            const encryptedOutput = document.getElementById('encryptedOutput');
+            
+            encryptedOutput.value = encrypted;
+            outputContainer.classList.remove('hidden');
+            copyFeedback.textContent = '';
+        }
+
+        // Copies the encrypted key to the user's clipboard.
+        function copyToClipboard() {
+            const encryptedOutput = document.getElementById('encryptedOutput');
+            const copyFeedback = document.getElementById('copy-feedback');
+            
+            // Create a temporary textarea to use the document.execCommand('copy')
+            const tempTextArea = document.createElement('textarea');
+            tempTextArea.value = encryptedOutput.value;
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            
+            try {
+                document.execCommand('copy');
+                copyFeedback.textContent = 'Copied to clipboard!';
+            } catch (err) {
+                copyFeedback.textContent = 'Failed to copy.';
+                console.error('Fallback: Oops, unable to copy', err);
+            }
+
+            document.body.removeChild(tempTextArea);
+        }
+    </script>
+
+</body>
+</html>

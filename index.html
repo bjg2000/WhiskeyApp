@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Whiskey Companion</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
   <style>
     /* Custom styles or overrides for dark theme */
     body {
@@ -124,6 +125,16 @@
 
   <h1 class="text-3xl font-bold mb-6 text-gray-100">Whiskey Companion</h1>
 
+  <!-- API Key Unlock Section -->
+  <div id="auth-container" class="max-w-md mx-auto mb-6 p-4 bg-gray-800 rounded-lg shadow-lg">
+      <label for="passkey" class="block mb-2 font-medium text-gray-300">Enter Password to Unlock App</label>
+      <div class="flex">
+        <input type="password" id="passkey" class="w-full bg-gray-700 border border-gray-600 rounded-l-lg p-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="Your password...">
+        <button onclick="unlockApi()" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-r-lg transition duration-300">Unlock</button>
+      </div>
+      <p id="auth-status" class="text-sm mt-2 text-yellow-400">App is locked.</p>
+  </div>
+
   <div class="flex flex-col items-center">
       <video id="video" autoplay playsinline class="mb-4"></video>
       <canvas id="canvas" style="display:none;" class="mb-4"></canvas>
@@ -149,496 +160,344 @@
       </div>
 
   <script>
-    // Note: Using the Tailwind CSS CDN is convenient for development,
-    // but for production, it's recommended to install Tailwind as a PostCSS plugin
-    // or use the Tailwind CLI for better performance and smaller file sizes.
-    // See: https://tailwindcss.com/docs/installation
+    // --- SECURITY ---
+    // Use the Encryptor tool to generate this key.
+    // Paste the output from the encryptor tool here.
+    const ENCRYPTED_API_KEY = "U2FsdGVkX199x9Yx53vw2E12nMPpPn5VO0D8A0HeB6LqrN+TtpBNE5J3sZDHSKeH7lPgMITF6FgKCl1Rwr5Q2g==";
+    let decryptedApiKey = null; // This will hold the decrypted API key
 
-    // *** WARNING: Embedding your API key directly in client-side code (like this) is INSECURE. ***
-    // This is done here based on user request for a local-only file, but is NOT recommended
-    // for publicly hosted websites or applications where the source code is accessible.
-    const API_KEY = "AIzaSyB6fX37O4pw8G2o-TWOn5nROIPRHjc07_c"; // User's actual API key - Included as requested.
-
+    // --- DOM ELEMENTS & GLOBAL VARS ---
     let video = document.getElementById('video');
     let canvas = document.getElementById('canvas');
     let context = canvas.getContext('2d');
-    let uploadInput = document.getElementById('uploadInput'); // Get the file input element
-    let db; // Variable to hold the IndexedDB database instance
-    let currentImageData = null; // Variable to temporarily store the image data
+    let uploadInput = document.getElementById('uploadInput');
+    let db; // IndexedDB database instance
+    let currentImageData = null; // Temporarily store the image data
 
-    // Function to start the camera stream
+    // --- API KEY MANAGEMENT ---
+    function unlockApi() {
+        const passkey = document.getElementById('passkey').value;
+        const authStatus = document.getElementById('auth-status');
+
+        if (!passkey) {
+            showMessageBox("Please enter a password.");
+            return;
+        }
+        if (ENCRYPTED_API_KEY === "PASTE_YOUR_ENCRYPTED_KEY_HERE") {
+            showMessageBox("Error: The encrypted API key has not been set in the code.");
+            authStatus.textContent = "Configuration Error!";
+            authStatus.className = 'text-sm mt-2 text-red-500';
+            return;
+        }
+
+        try {
+            // Decrypt the key using AES
+            const bytes = CryptoJS.AES.decrypt(ENCRYPTED_API_KEY, passkey);
+            const originalText = bytes.toString(CryptoJS.enc.Utf8);
+
+            if (originalText) {
+                decryptedApiKey = originalText;
+                authStatus.textContent = 'App Unlocked!';
+                authStatus.className = 'text-sm mt-2 text-green-400';
+                // Hide the auth container after successful unlock
+                document.getElementById('auth-container').style.display = 'none';
+            } else {
+                // This case happens if the password is wrong, resulting in empty decrypted text
+                throw new Error("Decryption failed. Invalid password.");
+            }
+        } catch (e) {
+            console.error("Decryption error:", e);
+            showMessageBox("Invalid password. Could not unlock the app.");
+            authStatus.textContent = 'Invalid Password!';
+            authStatus.className = 'text-sm mt-2 text-red-500';
+            decryptedApiKey = null; // Ensure key is null on failure
+        }
+    }
+
+    // --- CAMERA & UPLOAD FUNCTIONS ---
     async function startCamera() {
       try {
-        // Request access to the user's camera, preferring the environment-facing camera
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'environment' },
-          audio: false // No audio needed
+          audio: false
         });
-        // Set the video source to the camera stream
         video.srcObject = stream;
-        // Hide canvas and show video when starting camera
         canvas.style.display = 'none';
         video.style.display = 'block';
-        currentImageData = null; // Clear previous image data
+        currentImageData = null;
       } catch (e) {
-        // Alert the user if camera access is denied or not available.
-        // Use a more user-friendly message box instead of alert()
         showMessageBox('Camera access denied or not available.');
         console.error("Camera access error:", e);
       }
     }
 
-    // Function to capture a photo from the video stream
     function capturePhoto() {
-      // Display the canvas and hide the video
       canvas.style.display = 'block';
       video.style.display = 'none';
-
-      // Set canvas dimensions to match video dimensions
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
-
-      // Draw the current frame from the video onto the canvas
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      // Stop the video stream after capturing
       if (video.srcObject) {
-          const stream = video.srcObject;
-          const tracks = stream.getTracks();
-          tracks.forEach(track => track.stop());
-          video.srcObject = null; // Clear the video source
+        const stream = video.srcObject;
+        const tracks = stream.getTracks();
+        tracks.forEach(track => track.stop());
+        video.srcObject = null;
       }
-
-      // Get the image data and store it
       currentImageData = canvas.toDataURL('image/png');
-
-      // Call the function to identify the whiskey from the captured photo
       identifyWhiskey();
     }
 
-    // Function to trigger the hidden file input click
     function triggerUpload() {
-        uploadInput.click();
+      uploadInput.click();
     }
 
-    // Event listener for when a file is selected via the upload input
     uploadInput.addEventListener('change', function(event) {
-        const file = event.target.files[0]; // Get the selected file
-
-        if (file) {
-            const reader = new FileReader(); // Create a FileReader to read the file
-
-            reader.onload = function(e) {
-                const img = new Image(); // Create a new Image object
-                img.onload = function() {
-                    // Once the image is loaded, draw it onto the canvas
-                    canvas.style.display = 'block'; // Show canvas
-                    video.style.display = 'none'; // Hide video (if visible)
-
-                    // Set canvas dimensions to match image dimensions
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-
-                    // Draw the image onto the canvas
-                    context.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-                    // Get the image data and store it
-                    currentImageData = canvas.toDataURL('image/png');
-
-                    // Call the identifyWhiskey function with the canvas content
-                    identifyWhiskey();
-                }
-                img.src = e.target.result; // Set the image source to the data URL
-            }
-
-            reader.readAsDataURL(file); // Read the file as a data URL (base64)
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const img = new Image();
+          img.onload = function() {
+            canvas.style.display = 'block';
+            video.style.display = 'none';
+            canvas.width = img.width;
+            canvas.height = img.height;
+            context.drawImage(img, 0, 0, canvas.width, canvas.height);
+            currentImageData = canvas.toDataURL('image/png');
+            identifyWhiskey();
+          }
+          img.src = e.target.result;
         }
+        reader.readAsDataURL(file);
+      }
     });
 
-
-    // Function to send the captured image to the backend for identification
+    // --- API CALL & DATA PROCESSING ---
     async function identifyWhiskey() {
-      // Get the image data from the canvas as a base64 encoded PNG
-      // We now use the stored currentImageData
-      if (!currentImageData) {
-          console.error("No image data available for identification.");
-          document.getElementById('whiskeyList').innerHTML = '<p class="text-red-400">Error: No image data available.</p>';
-          return;
+      // SECURITY CHECK: Ensure the API key has been decrypted
+      if (!decryptedApiKey) {
+        showMessageBox("Please unlock the app with your password first.");
+        // Scroll to the auth container to make it visible
+        document.getElementById('auth-container').scrollIntoView({ behavior: 'smooth' });
+        return;
       }
 
-      // Remove the data URI prefix (e.g., "data:image/png;base64,")
-      // The API expects just the base64 string
+      if (!currentImageData) {
+        console.error("No image data available for identification.");
+        document.getElementById('whiskeyList').innerHTML = '<p class="text-red-400">Error: No image data available.</p>';
+        return;
+      }
+
       const base64Image = currentImageData.split(',')[1];
-
-      // Display a loading message
       document.getElementById('whiskeyList').innerHTML = '<p class="text-gray-300">Identifying whiskey...</p>';
-
-      // *** Direct API Call to Google Generative AI ***
-      // WARNING: API Key is exposed in this client-side code.
-      const API_ENDPOINT = `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
+      
+      const API_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=${decryptedApiKey}`;
 
       try {
         const response = await fetch(API_ENDPOINT, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-             contents: [
-                {
-                   parts: [
-                      { text: "Identify this whiskey. Provide its name, general composition (ingredients and flavor characteristics), and estimated price in US dollars. Return the information in JSON format." }, // Updated prompt to specify US dollars and simplify composition request
-                      { inline_data: { mime_type: 'image/png', data: base64Image } }
-                   ]
-                }
-             ]
+            contents: [{
+              parts: [
+                { text: "Identify this whiskey. Provide its name, general composition (ingredients and flavor characteristics), and estimated price in US dollars. Return the information in JSON format." },
+                { inlineData: { mime_type: 'image/png', data: base64Image } }
+              ]
+            }]
           })
         });
 
-        // *** IMPORTANT: Check if the response was successful (status code 2xx) ***
         if (!response.ok) {
-            // If response is not OK, try to read the error message
-            let errorDetails = 'Unknown error';
-            try {
-                const errorResponse = await response.json();
-                errorDetails = errorResponse.error ? (errorResponse.error.message || JSON.stringify(errorResponse)) : JSON.stringify(errorResponse);
-            } catch (jsonError) {
-                errorDetails = await response.text(); // Fallback to text if JSON parsing fails
-            }
-            console.error('HTTP error!', response.status, errorDetails);
-            // Display the error message to the user
-            document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error identifying whiskey: ${response.status} - ${errorDetails.substring(0, 200)}...</p>`;
-            return; // Stop processing
+          let errorDetails = 'Unknown error';
+          try {
+            const errorResponse = await response.json();
+            errorDetails = errorResponse.error ? (errorResponse.error.message || JSON.stringify(errorResponse)) : JSON.stringify(errorResponse);
+          } catch (jsonError) {
+            errorDetails = await response.text();
+          }
+          console.error('HTTP error!', response.status, errorDetails);
+          document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error identifying whiskey: ${response.status} - ${errorDetails.substring(0, 200)}...</p>`;
+          return;
         }
 
-        // If the response is OK, parse the JSON data
         const result = await response.json();
 
-        // Check if the response contains expected data structure
         if (!result.candidates || !result.candidates[0] || !result.candidates[0].content || !result.candidates[0].content.parts) {
-             console.error("Unexpected API response structure:", result);
-             document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error: Unexpected response format from AI model.</p>`;
-             return;
+          console.error("Unexpected API response structure:", result);
+          document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error: Unexpected response format from AI model.</p>`;
+          return;
         }
 
-        // Extract the text content from the response
         const rawText = result.candidates[0].content.parts.map(part => part.text).join('');
-
-        // Attempt to parse the JSON from the raw text
         let data;
         try {
-             // Remove markdown code block formatting if present
-             const jsonString = rawText.replace('```json\n', '').replace('```', '').trim();
-             data = JSON.parse(jsonString);
-             console.log("Parsed JSON data from API:", data); // Log the parsed data structure
-             console.log("Type of data.composition:", typeof data.composition); // Log the type of composition
+          const jsonString = rawText.replace(/```json\n?|```/g, '').trim();
+          data = JSON.parse(jsonString);
         } catch (jsonError) {
-             console.error("JSON Parsing Error:", jsonError);
-             console.log("Raw text from API:", rawText);
-             document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error: Failed to parse whiskey data from AI model response. Raw text: ${rawText.substring(0, 200)}...</p>`;
-             return;
+          console.error("JSON Parsing Error:", jsonError);
+          console.log("Raw text from API:", rawText);
+          document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error: Failed to parse whiskey data from AI model response. Raw text: ${rawText.substring(0, 200)}...</p>`;
+          return;
         }
-
-
-        // Process and display the successful data
-        console.log("Data being prepared for display and addToList:", { name: data.name, composition: data.composition, estimated_price: data.estimated_price }); // Log data before display/addToList
-        displayWhiskeyInfo(data); // Call display function with data
-
+        displayWhiskeyInfo(data);
       } catch (error) {
-        // Catch any network errors or other exceptions during the fetch
         console.error('Error identifying whiskey:', error);
-        // Display a general error message to the user
         document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error identifying whiskey: ${error.message}</p>`;
       }
     }
 
-    // Helper function to clean up composition string
-    function cleanCompositionString(str) {
-        if (typeof str !== 'string') return str;
-        // Remove common unwanted characters like quotes, backslashes, curly braces, brackets, etc.
-        return str.replace(/[\\"{}\[\]]/g, '').trim();
-    }
-
-    // Function to display the identified whiskey information
     function displayWhiskeyInfo(data) {
       const whiskeyList = document.getElementById('whiskeyList');
-      // Clear the loading message or previous results
-      whiskeyList.innerHTML = '';
+      whiskeyList.innerHTML = ''; // Clear previous results
 
       const whiskeyInfo = document.createElement('div');
-
-      // Ensure data properties are strings before escaping
-      const name = String(data.name || '');
-      const estimated_price = String(data.estimated_price || '');
-
-      // Get composition as a string, format if object, then clean
+      const name = String(data.name || 'Unknown Whiskey');
+      const estimated_price = String(data.estimated_price || 'N/A');
       let composition = 'No composition available.';
+
       if (typeof data.composition === 'object' && data.composition !== null) {
-          let tempComposition = '';
-          if (data.composition.ingredients) {
-              tempComposition += `Ingredients: ${data.composition.ingredients}`;
-          }
-          if (data.composition.flavor_characteristics) {
-              if (tempComposition) tempComposition += ', '; // Add separator if ingredients exist
-              tempComposition += `Flavor Characteristics: ${data.composition.flavor_characteristics}`;
-          }
-          composition = tempComposition.trim();
+          composition = `Ingredients: ${data.composition.ingredients || 'N/A'}. Flavor: ${data.composition.flavor_characteristics || 'N/A'}`;
       } else if (typeof data.composition === 'string') {
-          composition = data.composition; // Use as is if already a string
+          composition = data.composition;
       }
-      const cleanedComposition = cleanCompositionString(composition);
 
-      console.log("Data being prepared for display and addToList:", { name, composition: data.composition, estimated_price, cleanedComposition }); // Log data before display/addToList
-
-      // Create the HTML structure
       whiskeyInfo.innerHTML = `
-        <h3 class="text-xl font-semibold mb-2">${escape(name || 'Unknown Whiskey')}</h3>
-        <p class="text-gray-400 mb-2">Composition:</p>
-        <p class="text-gray-400 mb-4">${escape(cleanedComposition || 'No composition available.')}</p>
-        <p class="text-gray-400 mb-4">Estimated Price: $${escape(estimated_price || 'N/A')}</p>
-      `;
+        <div class="text-content">
+            <h3 class="text-xl font-semibold mb-2">${escapeHtml(name)}</h3>
+            <p class="text-gray-400 mb-2"><strong>Composition:</strong> ${escapeHtml(composition)}</p>
+            <p class="text-gray-400 mb-4"><strong>Estimated Price:</strong> $${escapeHtml(estimated_price)}</p>
+        </div>`;
 
-      // Create the button element separately
       const addButton = document.createElement('button');
       addButton.textContent = 'Add to My List';
       addButton.className = 'mt-4 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out text-sm';
+      addButton.onclick = () => addToMyList(name, composition, estimated_price);
+      
+      // Find the text-content div and append the button to it
+      const textContentDiv = whiskeyInfo.querySelector('.text-content');
+      textContentDiv.appendChild(addButton);
 
-      // Add the event listener to the button
-      addButton.addEventListener('click', function() {
-          // Pass the data directly to the addToMyList function
-          addToMyList(name, cleanedComposition, estimated_price);
-      });
-
-      // Append the button to the whiskeyInfo div
-      whiskeyInfo.appendChild(addButton);
-
-      // Append the whiskeyInfo div to the whiskeyList
       whiskeyList.appendChild(whiskeyInfo);
     }
 
-    // Function to add the identified whiskey to the IndexedDB list
-    // Now retrieves image data from currentImageData variable
-    function addToMyList(name, composition, estimated_price) { // Removed imageData parameter
-        // Unescape the values before adding to DB - not needed here as we get them directly from JS variables
-        const unescapedName = name;
-        const unescapedComposition = composition; // This is now the cleaned string
-        const unescapedEstimatedPrice = estimated_price;
-        // Use the stored currentImageData
-        const imageDataToSave = currentImageData;
-
-
-        console.log("Data received in addToMyList:", { unescapedName, unescapedComposition, unescapedEstimatedPrice, imageDataToSave: imageDataToSave ? 'Image data present' : 'No image data' }); // Log data received in addToMyList
-
-        const transaction = db.transaction(['whiskeys'], 'readwrite');
-        const store = transaction.objectStore('whiskeys');
-        // Store composition as 'description' and estimated_price as 'price' for consistency with display functions
-        const whiskey = {
-            name: unescapedName,
-            description: unescapedComposition, // Store the cleaned string composition
-            price: unescapedEstimatedPrice,
-            notes: '',
-            image: imageDataToSave // Save the image data from the variable
-        };
-
-        console.log("Whiskey object being added to IndexedDB:", whiskey); // Log object before adding to DB
-
-        // Add the whiskey to the object store
-        const request = store.add(whiskey);
-
-        request.onsuccess = function() {
-            console.log("Whiskey added to list successfully:", whiskey);
-            displaySavedWhiskeys(); // Refresh the displayed list
-            currentImageData = null; // Clear the temporary image data after saving
-        };
-
-        request.onerror = function(event) {
-            console.error("Error adding whiskey to list:", event.target.error);
-            alert("Error adding whiskey to list: " + event.target.error);
-        };
+    // --- DATABASE (IndexedDB) FUNCTIONS ---
+    function initDatabase() {
+      const request = indexedDB.open('WhiskeyDB', 1);
+      request.onupgradeneeded = function(event) {
+        db = event.target.result;
+        if (!db.objectStoreNames.contains('whiskeys')) {
+          db.createObjectStore('whiskeys', { keyPath: 'id', autoIncrement: true });
+        }
+      };
+      request.onsuccess = function(event) {
+        db = event.target.result;
+        displaySavedWhiskeys();
+      };
+      request.onerror = function(event) {
+        console.error('Database error:', event.target.errorCode);
+      };
     }
 
-    // Function to display the saved whiskeys from IndexedDB with editable fields and image
+    function addToMyList(name, composition, estimated_price) {
+      const imageDataToSave = currentImageData;
+      const transaction = db.transaction(['whiskeys'], 'readwrite');
+      const store = transaction.objectStore('whiskeys');
+      const whiskey = {
+        name: name,
+        description: composition,
+        price: estimated_price,
+        notes: '',
+        image: imageDataToSave
+      };
+      const request = store.add(whiskey);
+      request.onsuccess = function() {
+        displaySavedWhiskeys();
+        currentImageData = null; // Clear temp image
+      };
+      request.onerror = function(event) {
+        console.error("Error adding whiskey:", event.target.error);
+      };
+    }
+
     function displaySavedWhiskeys() {
       const transaction = db.transaction(['whiskeys'], 'readonly');
       const store = transaction.objectStore('whiskeys');
       const whiskeyList = document.getElementById('whiskeyList');
-      whiskeyList.innerHTML = ''; // Clear the current list display
+      whiskeyList.innerHTML = '';
 
-      // Open a cursor to iterate through the object store
       store.openCursor().onsuccess = function(event) {
         const cursor = event.target.result;
         if (cursor) {
           const whiskey = cursor.value;
-          console.log("Whiskey object retrieved from IndexedDB:", whiskey); // Log object from DB
-          console.log("Type of whiskey.description:", typeof whiskey.description); // Log the type of description from DB
-
           const listItem = document.createElement('div');
-          listItem.setAttribute('data-key', cursor.key); // Store the IndexedDB key
-
-          // Ensure description is a string before using it in the textarea
-          const displayComposition = typeof whiskey.description === 'string' ? whiskey.description : JSON.stringify(whiskey.description || '');
-
+          listItem.setAttribute('data-key', cursor.key);
 
           listItem.innerHTML = `
             <button class="delete-button" onclick="deleteWhiskey(${cursor.key})">&times;</button>
-            ${whiskey.image ? `<img src="${escape(whiskey.image)}" class="saved-whiskey-image" alt="Whiskey Image">` : ''}
+            ${whiskey.image ? `<img src="${escapeHtml(whiskey.image)}" class="saved-whiskey-image" alt="Whiskey Image">` : ''}
             <div class="text-content">
                 <label for="name-${cursor.key}" class="block text-sm font-medium text-gray-400">Name:</label>
-                <input type="text" id="name-${cursor.key}" class="editable-field text-lg font-semibold" value="${escape(whiskey.name)}">
+                <input type="text" id="name-${cursor.key}" class="editable-field text-lg font-semibold" value="${escapeHtml(whiskey.name)}">
 
                 <label for="composition-${cursor.key}" class="block text-sm font-medium text-gray-400 mt-2">Composition:</label>
-                <textarea id="composition-${cursor.key}" placeholder="Ingredients and flavor characteristics..." class="w-full p-3 mt-1 border rounded-md focus:outline-none focus:ring focus:border-blue-300">${escape(displayComposition)}</textarea>
+                <textarea id="composition-${cursor.key}" class="w-full p-2 mt-1">${escapeHtml(whiskey.description)}</textarea>
+
                 <label for="price-${cursor.key}" class="block text-sm font-medium text-gray-400 mt-2">Price:</label>
-                <input type="text" id="price-${cursor.key}" class="editable-field text-gray-400" value="${escape(whiskey.price)}">
+                <input type="text" id="price-${cursor.key}" class="editable-field" value="${escapeHtml(whiskey.price)}">
 
                 <label for="notes-${cursor.key}" class="block text-sm font-medium text-gray-400 mt-2">Notes:</label>
-                <textarea id="notes-${cursor.key}" placeholder="Add your notes here..." class="w-full p-3 mt-1 border rounded-md focus:outline-none focus:ring focus:border-blue-300">${escape(whiskey.notes)}</textarea>
+                <textarea id="notes-${cursor.key}" placeholder="Add your notes here..." class="w-full p-2 mt-1">${escapeHtml(whiskey.notes)}</textarea>
 
                 <button onclick="saveWhiskeyEdit(${cursor.key})"
-                    class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out text-sm">
+                    class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
                     Save Changes
                 </button>
-            </div>
-          `;
+            </div>`;
           whiskeyList.appendChild(listItem);
-          cursor.continue(); // Move to the next item in the cursor
-        } else {
-          // No more items in the cursor
-          console.log("All saved whiskeys displayed.");
+          cursor.continue();
         }
-      };
-
-      store.openCursor().onerror = function(event) {
-          console.error("Error opening cursor:", event.target.error);
       };
     }
 
-    // Function to save edits made to a whiskey entry
     function saveWhiskeyEdit(key) {
-        const transaction = db.transaction(['whiskeys'], 'readwrite');
-        const store = transaction.objectStore('whiskeys');
+      const transaction = db.transaction(['whiskeys'], 'readwrite');
+      const store = transaction.objectStore('whiskeys');
+      const getRequest = store.get(key);
 
-        // Get the input field values
-        const name = unescape(document.getElementById(`name-${key}`).value);
-        const composition = unescape(document.getElementById(`composition-${key}`).value); // Get value from textarea
-        const price = unescape(document.getElementById(`price-${key}`).value);
-        const notes = unescape(document.getElementById(`notes-${key}`).value);
-
-        // Get the existing whiskey object
-        const getRequest = store.get(key);
-
-        getRequest.onsuccess = function(event) {
-            const whiskey = event.target.result;
-            if (whiskey) {
-                // Update the whiskey object with new values
-                whiskey.name = name;
-                whiskey.description = composition; // Store composition in description field
-                whiskey.price = price;
-                whiskey.notes = notes;
-                // Image data is not edited, it remains the same
-
-                console.log("Whiskey object being saved after edit:", whiskey); // Log object before saving
-
-                // Put the updated whiskey back into the object store
-                const putRequest = store.put(whiskey);
-
-                putRequest.onsuccess = function() {
-                    console.log("Whiskey with key", key, "updated successfully.");
-                    // Optionally, provide user feedback (e.g., a temporary message)
-                };
-
-                putRequest.onerror = function(event) {
-                    console.error("Error updating whiskey with key", key, ":", event.target.error);
-                    alert("Error saving changes: " + event.target.error);
-                };
-            } else {
-                console.warn("Whiskey with key", key, "not found for editing.");
-            }
-        };
-
-        getRequest.onerror = function(event) {
-             console.error("Error retrieving whiskey with key", key, "for editing:", event.target.error);
-             alert("Error retrieving whiskey for editing: " + event.target.error);
-        };
-    }
-
-    // Function to delete a whiskey entry
-    function deleteWhiskey(key) {
-        const transaction = db.transaction(['whiskeys'], 'readwrite');
-        const store = transaction.objectStore('whiskeys');
-
-        // Delete the whiskey by its key
-        const deleteRequest = store.delete(key);
-
-        deleteRequest.onsuccess = function() {
-            console.log("Whiskey with key", key, "deleted successfully.");
-            displaySavedWhiskeys(); // Refresh the displayed list
-        };
-
-        deleteRequest.onerror = function(event) {
-            console.error("Error deleting whiskey with key", key, ":", event.target.error);
-            alert("Error deleting whiskey: " + event.target.error);
-        };
-    }
-
-
-    // Function to initialize the IndexedDB database
-    function initDatabase() {
-      // Open or create the database
-      const request = indexedDB.open('WhiskeyDB', 1); // Database name and version
-
-      // This event is triggered when the database needs to be created or upgraded
-      request.onupgradeneeded = function(event) {
-        db = event.target.result;
-        // Create an object store (like a table)
-        // Use 'id' as the keyPath and enable autoIncrement
-        if (!db.objectStoreNames.contains('whiskeys')) {
-            const store = db.createObjectStore('whiskeys', { keyPath: 'id', autoIncrement: true });
-            // Create an index on the 'name' property for faster lookups (optional)
-            store.createIndex('name', 'name', { unique: false });
-            // No need to create an index for image data or composition, as they won't be searched on
-            console.log("IndexedDB 'whiskeys' object store created.");
+      getRequest.onsuccess = function(event) {
+        const whiskey = event.target.result;
+        if (whiskey) {
+          whiskey.name = document.getElementById(`name-${key}`).value;
+          whiskey.description = document.getElementById(`composition-${key}`).value;
+          whiskey.price = document.getElementById(`price-${key}`).value;
+          whiskey.notes = document.getElementById(`notes-${key}`).value;
+          store.put(whiskey);
         }
-        // If you were upgrading from a previous version without the image field,
-        // you would handle the upgrade here to add the 'image' field to existing objects.
-        // For this example, we assume a fresh database or that the new field is okay to be missing in old entries.
-      };
-
-      // This event is triggered when the database is successfully opened
-      request.onsuccess = function(event) {
-        db = event.target.result;
-        console.log("IndexedDB opened successfully.");
-        // Display any saved whiskeys when the page loads
-        displaySavedWhiskeys();
-      };
-
-      request.onerror = function(event) {
-        console.error('Database error:', event.target.errorCode);
-        alert('Database error: ' + event.target.errorCode);
       };
     }
 
-    // Initialize the database when the window loads
-    window.onload = initDatabase;
-
-    // Helper functions to escape/unescape strings for use in HTML attributes and values
-    // This prevents issues with quotes or special characters in the data
-    function escape(str) {
-        if (typeof str !== 'string') return str; // Return non-strings directly
-        return str.replace(/'/g, "&apos;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    function deleteWhiskey(key) {
+      const transaction = db.transaction(['whiskeys'], 'readwrite');
+      const store = transaction.objectStore('whiskeys');
+      const deleteRequest = store.delete(key);
+      deleteRequest.onsuccess = () => displaySavedWhiskeys();
     }
 
-    function unescape(str) {
-         if (typeof str !== 'string') return str; // Return non-strings directly
-        return str.replace(/&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+    // --- UTILITY FUNCTIONS ---
+    function escapeHtml(str) {
+      if (typeof str !== 'string') return str;
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
 
-    // Function to display a simple message box (replaces alert for better styling potential)
     function showMessageBox(message) {
-        // You can implement a more sophisticated message box here using HTML/CSS/JS
-        alert(message); // Using alert for simplicity in this version
+      // A simple, non-blocking message box could be implemented here.
+      // For now, we'll use alert.
+      alert(message);
     }
 
+    // --- INITIALIZATION ---
+    window.onload = initDatabase;
   </script>
 
 </body>
