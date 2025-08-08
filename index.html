@@ -343,10 +343,8 @@
 
         // --- API CALL & DATA PROCESSING ---
         async function identifyWhiskey() {
-            // SECURITY CHECK: Ensure the API key has been decrypted or retrieved from storage
             if (!decryptedApiKey) {
                 showMessageBox("Please unlock the app with your password first.");
-                // Scroll to the auth container to make it visible
                 document.getElementById('auth-container').scrollIntoView({ behavior: 'smooth' });
                 return;
             }
@@ -360,21 +358,39 @@
             const base64Image = currentImageData.split(',')[1];
             document.getElementById('whiskeyList').innerHTML = '<p class="text-gray-300">Identifying whiskey...</p>';
             
-            // Use the decrypted key from the global variable
             const API_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${decryptedApiKey}`;
+            
+            // --- UPDATED: Using a more detailed structured response schema ---
+            const payload = {
+                contents: [{
+                    parts: [
+                        { text: "Identify this whiskey. Provide its name, composition, mash bill, alcohol by volume (ABV), age statement, and a brief description of its tasting notes. The estimated price must be a string. If the price is a guess, use a tilde. For example: `~$80-90`. Do not use N/A or Unknown. For composition, mash bill, ABV, and tasting notes, provide the information if available, otherwise just leave the field out or provide a brief string like 'Not specified'." },
+                        { inlineData: { mime_type: 'image/png', data: base64Image } }
+                    ]
+                }],
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            "name": { "type": "STRING" },
+                            "composition": { "type": "STRING" },
+                            "mash_bill": { "type": "STRING" },
+                            "abv": { "type": "STRING", "description": "Alcohol by volume percentage, e.g., '40% ABV'." },
+                            "age_statement": { "type": "STRING", "description": "The age of the whiskey, e.g., '10-Year-Old'." },
+                            "tasting_notes": { "type": "STRING", "description": "Brief description of the whiskey's flavor profile." },
+                            "estimated_price": { "type": "STRING", "description": "The estimated price in US dollars. Must be a string like `$80-90` or `~$80-90` for a guess." }
+                        },
+                        "propertyOrdering": ["name", "composition", "mash_bill", "abv", "age_statement", "tasting_notes", "estimated_price"]
+                    }
+                }
+            };
 
             try {
                 const response = await fetch(API_ENDPOINT, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{
-                            parts: [
-                                { text: "Identify this whiskey. Provide its name, general composition (ingredients and flavor characteristics), and estimated price in US dollars. Return the information in JSON format." },
-                                { inlineData: { mime_type: 'image/png', data: base64Image } }
-                            ]
-                        }]
-                    })
+                    body: JSON.stringify(payload)
                 });
 
                 if (!response.ok) {
@@ -391,57 +407,44 @@
                 }
 
                 const result = await response.json();
-
-                if (!result.candidates || !result.candidates[0] || !result.candidates[0].content || !result.candidates[0].content.parts) {
-                    console.error("Unexpected API response structure:", result);
-                    document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error: Unexpected response format from AI model.</p>`;
-                    return;
-                }
-
-                const rawText = result.candidates[0].content.parts.map(part => part.text).join('');
-                let data;
-                try {
-                    const jsonString = rawText.replace(/```json\n?|```/g, '').trim();
-                    data = JSON.parse(jsonString);
-                } catch (jsonError) {
-                    console.error("JSON Parsing Error:", jsonError);
-                    console.log("Raw text from API:", rawText);
-                    document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error: Failed to parse whiskey data from AI model response. Raw text: ${rawText.substring(0, 200)}...</p>`;
-                    return;
-                }
+                const jsonText = result.candidates[0].content.parts[0].text;
+                const data = JSON.parse(jsonText);
+                
                 displayWhiskeyInfo(data);
             } catch (error) {
                 console.error('Error identifying whiskey:', error);
                 document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error identifying whiskey: ${error.message}</p>`;
             }
         }
-
+        
         function displayWhiskeyInfo(data) {
             const whiskeyList = document.getElementById('whiskeyList');
             whiskeyList.innerHTML = ''; // Clear previous results
 
             const whiskeyInfo = document.createElement('div');
             const name = String(data.name || 'Unknown Whiskey');
+            const composition = String(data.composition || 'Not specified.');
+            const mash_bill = String(data.mash_bill || 'Not specified.');
+            const abv = String(data.abv || 'Not specified.');
+            const age_statement = String(data.age_statement || 'Not specified.');
+            const tasting_notes = String(data.tasting_notes || 'Not specified.');
             const estimated_price = String(data.estimated_price || 'N/A');
-            let composition = 'No composition available.';
-
-            if (typeof data.composition === 'object' && data.composition !== null) {
-                composition = `Ingredients: ${data.composition.ingredients || 'N/A'}. Flavor: ${data.composition.flavor_characteristics || 'N/A'}`;
-            } else if (typeof data.composition === 'string') {
-                composition = data.composition;
-            }
-
+            
             whiskeyInfo.innerHTML = `
                 <div class="text-content">
                     <h3 class="text-xl font-semibold mb-2">${escapeHtml(name)}</h3>
-                    <p class="text-gray-400 mb-2"><strong>Composition:</strong> ${escapeHtml(composition)}</p>
-                    <p class="text-gray-400 mb-4"><strong>Estimated Price:</strong> $${escapeHtml(estimated_price)}</p>
+                    <p class="text-gray-400 mb-1"><strong>Composition:</strong> ${escapeHtml(composition)}</p>
+                    <p class="text-gray-400 mb-1"><strong>Mash Bill:</strong> ${escapeHtml(mash_bill)}</p>
+                    <p class="text-gray-400 mb-1"><strong>ABV:</strong> ${escapeHtml(abv)}</p>
+                    <p class="text-gray-400 mb-1"><strong>Age Statement:</strong> ${escapeHtml(age_statement)}</p>
+                    <p class="text-gray-400 mb-1"><strong>Tasting Notes:</strong> ${escapeHtml(tasting_notes)}</p>
+                    <p class="text-gray-400 mb-4"><strong>Estimated Price:</strong> ${escapeHtml(estimated_price)}</p>
                 </div>`;
 
             const addButton = document.createElement('button');
             addButton.textContent = 'Add to My List';
             addButton.className = 'mt-4 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out text-sm';
-            addButton.onclick = () => addToMyList(name, composition, estimated_price);
+            addButton.onclick = () => addToMyList(name, composition, mash_bill, abv, age_statement, tasting_notes, estimated_price);
             
             const textContentDiv = whiskeyInfo.querySelector('.text-content');
             textContentDiv.appendChild(addButton);
@@ -467,13 +470,17 @@
             };
         }
 
-        function addToMyList(name, composition, estimated_price) {
+        function addToMyList(name, composition, mash_bill, abv, age_statement, tasting_notes, estimated_price) {
             const imageDataToSave = currentImageData;
             const transaction = db.transaction(['whiskeys'], 'readwrite');
             const store = transaction.objectStore('whiskeys');
             const whiskey = {
                 name: name,
-                description: composition,
+                composition: composition,
+                mash_bill: mash_bill,
+                abv: abv,
+                age_statement: age_statement,
+                tasting_notes: tasting_notes,
                 price: estimated_price,
                 notes: '',
                 image: imageDataToSave
@@ -516,10 +523,15 @@
             const lowerCaseSearchTerm = searchTerm.toLowerCase();
 
             const filteredWhiskies = allWhiskies.filter(whiskey => {
-                const nameMatch = whiskey.name.toLowerCase().includes(lowerCaseSearchTerm);
-                const descMatch = whiskey.description.toLowerCase().includes(lowerCaseSearchTerm);
-                const notesMatch = whiskey.notes.toLowerCase().includes(lowerCaseSearchTerm);
-                return nameMatch || descMatch || notesMatch;
+                // FIX: Check if properties exist before calling toLowerCase() to prevent errors
+                const nameMatch = (whiskey.name || '').toLowerCase().includes(lowerCaseSearchTerm);
+                const compositionMatch = (whiskey.composition || '').toLowerCase().includes(lowerCaseSearchTerm);
+                const notesMatch = (whiskey.notes || '').toLowerCase().includes(lowerCaseSearchTerm);
+                const mashBillMatch = (whiskey.mash_bill || '').toLowerCase().includes(lowerCaseSearchTerm);
+                const abvMatch = (whiskey.abv || '').toLowerCase().includes(lowerCaseSearchTerm);
+                const ageMatch = (whiskey.age_statement || '').toLowerCase().includes(lowerCaseSearchTerm);
+                
+                return nameMatch || compositionMatch || notesMatch || mashBillMatch || abvMatch || ageMatch;
             });
             
             if (filteredWhiskies.length === 0) {
@@ -531,7 +543,7 @@
 
         /**
          * Renders an array of whiskey objects to the UI.
-         * @param {Array} whiskiesToDisplay The array of whiskies to render.
+         * @param {Array} whiskiesToDisplay The array of whiskeys to render.
          */
         function renderWhiskeyList(whiskiesToDisplay) {
             const whiskeyList = document.getElementById('whiskeyList');
@@ -549,13 +561,25 @@
                         <input type="text" id="name-${whiskey.id}" class="editable-field text-lg font-semibold" value="${escapeHtml(whiskey.name)}">
 
                         <label for="composition-${whiskey.id}" class="block text-sm font-medium text-gray-400 mt-2">Composition:</label>
-                        <textarea id="composition-${whiskey.id}" class="w-full p-2 mt-1">${escapeHtml(whiskey.description)}</textarea>
+                        <input type="text" id="composition-${whiskey.id}" class="editable-field" value="${escapeHtml(whiskey.composition)}">
+
+                        <label for="mash_bill-${whiskey.id}" class="block text-sm font-medium text-gray-400 mt-2">Mash Bill:</label>
+                        <input type="text" id="mash_bill-${whiskey.id}" class="editable-field" value="${escapeHtml(whiskey.mash_bill)}">
+
+                        <label for="abv-${whiskey.id}" class="block text-sm font-medium text-gray-400 mt-2">ABV:</label>
+                        <input type="text" id="abv-${whiskey.id}" class="editable-field" value="${escapeHtml(whiskey.abv)}">
+
+                        <label for="age_statement-${whiskey.id}" class="block text-sm font-medium text-gray-400 mt-2">Age Statement:</label>
+                        <input type="text" id="age_statement-${whiskey.id}" class="editable-field" value="${escapeHtml(whiskey.age_statement)}">
+
+                        <label for="tasting_notes-${whiskey.id}" class="block text-sm font-medium text-gray-400 mt-2">Tasting Notes:</label>
+                        <textarea id="tasting_notes-${whiskey.id}" placeholder="Tasting notes..." class="w-full p-2 mt-1">${escapeHtml(whiskey.tasting_notes)}</textarea>
 
                         <label for="price-${whiskey.id}" class="block text-sm font-medium text-gray-400 mt-2">Price:</label>
                         <input type="text" id="price-${whiskey.id}" class="editable-field" value="${escapeHtml(whiskey.price)}">
 
-                        <label for="notes-${whiskey.id}" class="block text-sm font-medium text-gray-400 mt-2">Notes:</label>
-                        <textarea id="notes-${whiskey.id}" placeholder="Add your notes here..." class="w-full p-2 mt-1">${escapeHtml(whiskey.notes)}</textarea>
+                        <label for="notes-${whiskey.id}" class="block text-sm font-medium text-gray-400 mt-2">My Notes:</label>
+                        <textarea id="notes-${whiskey.id}" placeholder="Add your personal notes here..." class="w-full p-2 mt-1">${escapeHtml(whiskey.notes)}</textarea>
 
                         <button onclick="saveWhiskeyEdit(${whiskey.id})"
                             class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
@@ -566,7 +590,6 @@
             });
         }
         
-        // FIX: Correctly implemented save logic
         function saveWhiskeyEdit(key) {
             const transaction = db.transaction(['whiskeys'], 'readwrite');
             const store = transaction.objectStore('whiskeys');
@@ -577,7 +600,11 @@
                 if (whiskey) {
                     // Get the updated values from the input fields, unescaping them first
                     whiskey.name = unescapeHtml(document.getElementById(`name-${key}`).value);
-                    whiskey.description = unescapeHtml(document.getElementById(`composition-${key}`).value);
+                    whiskey.composition = unescapeHtml(document.getElementById(`composition-${key}`).value);
+                    whiskey.mash_bill = unescapeHtml(document.getElementById(`mash_bill-${key}`).value);
+                    whiskey.abv = unescapeHtml(document.getElementById(`abv-${key}`).value);
+                    whiskey.age_statement = unescapeHtml(document.getElementById(`age_statement-${key}`).value);
+                    whiskey.tasting_notes = unescapeHtml(document.getElementById(`tasting_notes-${key}`).value);
                     whiskey.price = unescapeHtml(document.getElementById(`price-${key}`).value);
                     whiskey.notes = unescapeHtml(document.getElementById(`notes-${key}`).value);
                     
@@ -586,16 +613,13 @@
 
                     putRequest.onsuccess = function() {
                         console.log("Whiskey updated successfully!");
-                        // Update the in-memory array to reflect the change
                         const index = allWhiskies.findIndex(w => w.id === key);
                         if (index > -1) {
-                            allWhiskies[index] = { ...whiskey }; // Create a new object to trigger reactivity
+                            allWhiskies[index] = { ...whiskey };
                         }
-                        // Re-render the list to show the change immediately without a full refresh
                         const searchTerm = document.getElementById('searchBox').value;
                         filterWhiskeyList(searchTerm);
                         
-                        // Provide a non-disruptive visual confirmation instead of an alert
                         const saveButton = document.querySelector(`div[data-key='${key}'] button[onclick^='saveWhiskeyEdit']`);
                         if(saveButton) {
                             const originalText = saveButton.textContent;
@@ -606,7 +630,7 @@
                                 saveButton.textContent = originalText;
                                 saveButton.classList.remove('bg-green-600');
                                 saveButton.classList.add('bg-blue-600', 'hover:bg-blue-700');
-                            }, 2000); // Revert back after 2 seconds
+                            }, 2000);
                         }
                     };
 
@@ -631,7 +655,6 @@
             return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
         }
 
-        // FIX: Added unescape function to handle saved text correctly
         function unescapeHtml(str) {
             if (typeof str !== 'string') return str;
             return str.replace(/&amp;/g, "&")
@@ -653,29 +676,29 @@
             const modal = document.getElementById('message-modal');
             modal.classList.add('hidden');
         }
+        
+        // --- IMPROVED ERROR HANDLING ---
+        window.onerror = function(message, source, lineno, colno, error) {
+            showMessageBox(`An unexpected error occurred. Please check the browser console for details. Error: ${message}`);
+            return true; // Prevents the default browser error handler
+        };
 
         // --- INITIALIZATION ---
-        /**
-         * Checks for a saved password in local storage on page load and initializes the app.
-         */
         function initializeApp() {
-            // First, check if a password is already in local storage.
             const savedPasskey = localStorage.getItem('whiskeyPasskey');
             if (savedPasskey && decryptAndSetKey(savedPasskey)) {
                 document.getElementById('auth-status').textContent = 'App Unlocked!';
                 document.getElementById('auth-status').className = 'text-sm mt-2 text-green-400';
                 document.getElementById('auth-container').style.display = 'none';
             } else {
-                // If no key is found or decryption fails, wait for user input
                 document.getElementById('passkey').addEventListener('keyup', function(event) {
                     if (event.key === 'Enter') {
-                        event.preventDefault(); // Prevent form submission if it were in a form
+                        event.preventDefault();
                         unlockApi();
                     }
                 });
             }
             initDatabase();
-            // Set up the search box listener
             document.getElementById('searchBox').addEventListener('keyup', (event) => {
                 const searchTerm = event.target.value;
                 filterWhiskeyList(searchTerm);
