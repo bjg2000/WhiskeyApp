@@ -402,8 +402,7 @@
             const API_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${decryptedApiKey}`;
             
             let parts = [];
-            let promptText = "Identify this whiskey. Provide its name, composition, mash bill, alcohol by volume (ABV), age statement, and a brief description of its tasting notes. The estimated price must be a string. If the price is a guess, use a tilde. For example: `~$80-90`. Do not use N/A or Unknown. For composition, mash bill, ABV, and tasting notes, provide the information if available, otherwise just leave the field out or provide a brief string like 'Not specified'.";
-            
+ let promptText = "Identify this whiskey and provide its name, composition, mash bill, alcohol by volume (ABV), age statement, tasting notes, and estimated price. For composition, mash bill, ABV, age statement, and tasting notes, if the exact information is not available, make a reasonable guess based on the whiskey type and any visible clues, and prefix the guessed value with a tilde (~). If you are very certain about a value, do not use a tilde. The estimated price must be a string. If the price is a guess, use a tilde. For example: `~$80-90`. The response MUST be valid JSON according to the specified schema, and ALL fields must be included.";
             if (textInput) {
                 promptText = `Identify the whiskey with the name "${textInput}". ${promptText}`;
                 parts.push({ text: promptText });
