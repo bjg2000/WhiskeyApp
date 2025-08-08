@@ -101,8 +101,9 @@
 
         /* Style for the saved image */
         .saved-whiskey-image {
-            width: 100px; /* Small fixed width for the image container */
-            height: auto; /* Allow height to adjust */
+            /* Increased size for better visibility */
+            width: 150px;
+            height: auto;
             border-radius: 0.25rem;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             flex-shrink: 0; /* Prevent image from shrinking */
@@ -111,7 +112,7 @@
 
 
         /* Hide the file input */
-        #uploadInput {
+        .hidden-file-input {
             display: none;
         }
 
@@ -169,7 +170,7 @@
     <div class="flex flex-col items-center">
         <video id="video" autoplay playsinline class="mb-4"></video>
         <canvas id="canvas" style="display:none;" class="mb-4"></canvas>
-        <input type="file" id="uploadInput" accept="image/*">
+        <input type="file" id="uploadInput" accept="image/*" class="hidden-file-input">
     </div>
 
 
@@ -183,6 +184,15 @@
         <button onclick="triggerUpload()" class="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out">
             Upload Photo
         </button>
+    </div>
+
+    <!-- New text-based identification section -->
+    <div class="max-w-md mx-auto mb-6 p-4 bg-gray-800 rounded-lg shadow-lg">
+        <label for="text-input" class="block mb-2 font-medium text-gray-300">Or, Identify by Text</label>
+        <div class="flex">
+            <input type="text" id="text-input" class="w-full bg-gray-700 border border-gray-600 rounded-l-lg p-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="e.g., Jack Daniel's Old No. 7">
+            <button onclick="identifyWhiskeyFromText()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-r-lg transition duration-300">Identify</button>
+        </div>
     </div>
 
 
@@ -342,32 +352,37 @@
         });
 
         // --- API CALL & DATA PROCESSING ---
-        async function identifyWhiskey() {
+        async function identifyWhiskey(textInput = null) {
             if (!decryptedApiKey) {
                 showMessageBox("Please unlock the app with your password first.");
                 document.getElementById('auth-container').scrollIntoView({ behavior: 'smooth' });
                 return;
             }
 
-            if (!currentImageData) {
-                console.error("No image data available for identification.");
-                document.getElementById('whiskeyList').innerHTML = '<p class="text-red-400">Error: No image data available.</p>';
+            if (!textInput && !currentImageData) {
+                console.error("No input data available for identification.");
+                document.getElementById('whiskeyList').innerHTML = '<p class="text-red-400">Error: No image or text data available.</p>';
                 return;
             }
 
-            const base64Image = currentImageData.split(',')[1];
             document.getElementById('whiskeyList').innerHTML = '<p class="text-gray-300">Identifying whiskey...</p>';
             
             const API_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${decryptedApiKey}`;
             
-            // --- UPDATED: Using a more detailed structured response schema ---
+            let parts = [];
+            let promptText = "Identify this whiskey. Provide its name, composition, mash bill, alcohol by volume (ABV), age statement, and a brief description of its tasting notes. The estimated price must be a string. If the price is a guess, use a tilde. For example: `~$80-90`. Do not use N/A or Unknown. For composition, mash bill, ABV, and tasting notes, provide the information if available, otherwise just leave the field out or provide a brief string like 'Not specified'.";
+            
+            if (textInput) {
+                promptText = `Identify the whiskey with the name "${textInput}". ${promptText}`;
+                parts.push({ text: promptText });
+            } else {
+                parts.push({ text: promptText });
+                const base64Image = currentImageData.split(',')[1];
+                parts.push({ inlineData: { mime_type: 'image/png', data: base64Image } });
+            }
+
             const payload = {
-                contents: [{
-                    parts: [
-                        { text: "Identify this whiskey. Provide its name, composition, mash bill, alcohol by volume (ABV), age statement, and a brief description of its tasting notes. The estimated price must be a string. If the price is a guess, use a tilde. For example: `~$80-90`. Do not use N/A or Unknown. For composition, mash bill, ABV, and tasting notes, provide the information if available, otherwise just leave the field out or provide a brief string like 'Not specified'." },
-                        { inlineData: { mime_type: 'image/png', data: base64Image } }
-                    ]
-                }],
+                contents: [{ parts: parts }],
                 generationConfig: {
                     responseMimeType: "application/json",
                     responseSchema: {
@@ -414,6 +429,28 @@
             } catch (error) {
                 console.error('Error identifying whiskey:', error);
                 document.getElementById('whiskeyList').innerHTML = `<p class="text-red-400">Error identifying whiskey: ${error.message}</p>`;
+            }
+        }
+        
+        // New function to handle text-based identification
+        function identifyWhiskeyFromText() {
+            const textInput = document.getElementById('text-input').value.trim();
+            if (textInput) {
+                // Clear any image data as this is a text-only identification
+                currentImageData = null;
+                // Stop any running camera stream
+                if (video.srcObject) {
+                    const stream = video.srcObject;
+                    const tracks = stream.getTracks();
+                    tracks.forEach(track => track.stop());
+                    video.srcObject = null;
+                }
+                video.style.display = 'none';
+                canvas.style.display = 'none';
+
+                identifyWhiskey(textInput);
+            } else {
+                showMessageBox("Please enter a whiskey name to identify.");
             }
         }
         
@@ -553,39 +590,79 @@
                 // Use the whiskey's id for the data-key
                 listItem.setAttribute('data-key', whiskey.id);
 
-                listItem.innerHTML = `
-                    <button class="delete-button" onclick="deleteWhiskey(${whiskey.id})">&times;</button>
-                    ${whiskey.image ? `<img src="${escapeHtml(whiskey.image)}" class="saved-whiskey-image" alt="Whiskey Image">` : ''}
-                    <div class="text-content">
-                        <label for="name-${whiskey.id}" class="block text-sm font-medium text-gray-400">Name:</label>
-                        <input type="text" id="name-${whiskey.id}" class="editable-field text-lg font-semibold" value="${escapeHtml(whiskey.name)}">
+                // Re-structured the photo and button container for a cleaner, stacked layout
+                const photoContainer = document.createElement('div');
+                photoContainer.className = 'flex-shrink-0 flex flex-col items-center';
 
-                        <label for="composition-${whiskey.id}" class="block text-sm font-medium text-gray-400 mt-2">Composition:</label>
-                        <input type="text" id="composition-${whiskey.id}" class="editable-field" value="${escapeHtml(whiskey.composition)}">
+                const imageHtml = whiskey.image ? `<img src="${escapeHtml(whiskey.image)}" class="saved-whiskey-image" alt="Whiskey Image">` : '<div class="saved-whiskey-image border border-gray-600 flex items-center justify-center text-gray-500">No Photo</div>';
+                
+                photoContainer.innerHTML = imageHtml;
+                
+                const buttonContainer = document.createElement('div');
+                buttonContainer.className = 'flex flex-col space-y-2 mt-4';
+                
+                const fileInput = document.createElement('input');
+                fileInput.type = 'file';
+                fileInput.id = `upload-photo-${whiskey.id}`;
+                fileInput.accept = 'image/*';
+                fileInput.className = 'hidden-file-input';
+                fileInput.onchange = (e) => addPhotoToWhiskey(whiskey.id, e.target.files[0]);
+                
+                const addReplaceButton = document.createElement('button');
+                addReplaceButton.textContent = 'Add/Replace Photo';
+                addReplaceButton.className = 'bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-1 px-2 rounded-lg text-xs';
+                addReplaceButton.onclick = () => document.getElementById(`upload-photo-${whiskey.id}`).click();
+                
+                buttonContainer.appendChild(fileInput);
+                buttonContainer.appendChild(addReplaceButton);
 
-                        <label for="mash_bill-${whiskey.id}" class="block text-sm font-medium text-gray-400 mt-2">Mash Bill:</label>
-                        <input type="text" id="mash_bill-${whiskey.id}" class="editable-field" value="${escapeHtml(whiskey.mash_bill)}">
+                if (whiskey.image) {
+                    const removeButton = document.createElement('button');
+                    removeButton.textContent = 'Remove Photo';
+                    removeButton.className = 'bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-2 rounded-lg text-xs';
+                    removeButton.onclick = () => removeWhiskeyPhoto(whiskey.id);
+                    buttonContainer.appendChild(removeButton);
+                }
 
-                        <label for="abv-${whiskey.id}" class="block text-sm font-medium text-gray-400 mt-2">ABV:</label>
-                        <input type="text" id="abv-${whiskey.id}" class="editable-field" value="${escapeHtml(whiskey.abv)}">
+                photoContainer.appendChild(buttonContainer);
+                listItem.appendChild(photoContainer);
 
-                        <label for="age_statement-${whiskey.id}" class="block text-sm font-medium text-gray-400 mt-2">Age Statement:</label>
-                        <input type="text" id="age_statement-${whiskey.id}" class="editable-field" value="${escapeHtml(whiskey.age_statement)}">
+                const textContentDiv = document.createElement('div');
+                textContentDiv.className = 'text-content';
 
-                        <label for="tasting_notes-${whiskey.id}" class="block text-sm font-medium text-gray-400 mt-2">Tasting Notes:</label>
-                        <textarea id="tasting_notes-${whiskey.id}" placeholder="Tasting notes..." class="w-full p-2 mt-1">${escapeHtml(whiskey.tasting_notes)}</textarea>
+                textContentDiv.innerHTML = `
+                    <h3 class="text-xl font-semibold mb-2">${escapeHtml(whiskey.name)}</h3>
+                    <label for="name-${whiskey.id}" class="block text-sm font-medium text-gray-400">Name:</label>
+                    <input type="text" id="name-${whiskey.id}" class="editable-field text-lg font-semibold" value="${escapeHtml(whiskey.name)}">
 
-                        <label for="price-${whiskey.id}" class="block text-sm font-medium text-gray-400 mt-2">Price:</label>
-                        <input type="text" id="price-${whiskey.id}" class="editable-field" value="${escapeHtml(whiskey.price)}">
+                    <label for="composition-${whiskey.id}" class="block text-sm font-medium text-gray-400 mt-2">Composition:</label>
+                    <input type="text" id="composition-${whiskey.id}" class="editable-field" value="${escapeHtml(whiskey.composition)}">
 
-                        <label for="notes-${whiskey.id}" class="block text-sm font-medium text-gray-400 mt-2">My Notes:</label>
-                        <textarea id="notes-${whiskey.id}" placeholder="Add your personal notes here..." class="w-full p-2 mt-1">${escapeHtml(whiskey.notes)}</textarea>
+                    <label for="mash_bill-${whiskey.id}" class="block text-sm font-medium text-gray-400 mt-2">Mash Bill:</label>
+                    <input type="text" id="mash_bill-${whiskey.id}" class="editable-field" value="${escapeHtml(whiskey.mash_bill)}">
 
-                        <button onclick="saveWhiskeyEdit(${whiskey.id})"
-                            class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
-                            Save Changes
-                        </button>
-                    </div>`;
+                    <label for="abv-${whiskey.id}" class="block text-sm font-medium text-gray-400 mt-2">ABV:</label>
+                    <input type="text" id="abv-${whiskey.id}" class="editable-field" value="${escapeHtml(whiskey.abv)}">
+
+                    <label for="age_statement-${whiskey.id}" class="block text-sm font-medium text-gray-400 mt-2">Age Statement:</label>
+                    <input type="text" id="age_statement-${whiskey.id}" class="editable-field" value="${escapeHtml(whiskey.age_statement)}">
+
+                    <label for="tasting_notes-${whiskey.id}" class="block text-sm font-medium text-gray-400 mt-2">Tasting Notes:</label>
+                    <textarea id="tasting_notes-${whiskey.id}" placeholder="Tasting notes..." class="w-full p-2 mt-1">${escapeHtml(whiskey.tasting_notes)}</textarea>
+
+                    <label for="price-${whiskey.id}" class="block text-sm font-medium text-gray-400 mt-2">Price:</label>
+                    <input type="text" id="price-${whiskey.id}" class="editable-field" value="${escapeHtml(whiskey.price)}">
+
+                    <label for="notes-${whiskey.id}" class="block text-sm font-medium text-gray-400 mt-2">My Notes:</label>
+                    <textarea id="notes-${whiskey.id}" placeholder="Add your personal notes here..." class="w-full p-2 mt-1">${escapeHtml(whiskey.notes)}</textarea>
+
+                    <button onclick="saveWhiskeyEdit(${whiskey.id})"
+                        class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
+                        Save Changes
+                    </button>
+                `;
+
+                listItem.appendChild(textContentDiv);
                 whiskeyList.appendChild(listItem);
             });
         }
@@ -649,6 +726,51 @@
             deleteRequest.onsuccess = () => displaySavedWhiskies();
         }
 
+        // New function to add a photo to an existing entry
+        function addPhotoToWhiskey(key, file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const imageData = e.target.result;
+                const transaction = db.transaction(['whiskeys'], 'readwrite');
+                const store = transaction.objectStore('whiskeys');
+                const getRequest = store.get(key);
+
+                getRequest.onsuccess = function(event) {
+                    const whiskey = event.target.result;
+                    if (whiskey) {
+                        whiskey.image = imageData;
+                        const putRequest = store.put(whiskey);
+                        putRequest.onsuccess = () => displaySavedWhiskies();
+                        putRequest.onerror = (event) => {
+                            console.error("Error updating photo:", event.target.error);
+                            showMessageBox("Error adding photo to entry.");
+                        };
+                    }
+                };
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // New function to remove a photo from an existing entry
+        function removeWhiskeyPhoto(key) {
+            const transaction = db.transaction(['whiskeys'], 'readwrite');
+            const store = transaction.objectStore('whiskeys');
+            const getRequest = store.get(key);
+
+            getRequest.onsuccess = function(event) {
+                const whiskey = event.target.result;
+                if (whiskey) {
+                    whiskey.image = null;
+                    const putRequest = store.put(whiskey);
+                    putRequest.onsuccess = () => displaySavedWhiskies();
+                    putRequest.onerror = (event) => {
+                        console.error("Error removing photo:", event.target.error);
+                        showMessageBox("Error removing photo from entry.");
+                    };
+                }
+            };
+        }
+
         // --- UTILITY FUNCTIONS ---
         function escapeHtml(str) {
             if (typeof str !== 'string') return str;
@@ -702,6 +824,11 @@
             document.getElementById('searchBox').addEventListener('keyup', (event) => {
                 const searchTerm = event.target.value;
                 filterWhiskeyList(searchTerm);
+            });
+            document.getElementById('text-input').addEventListener('keyup', (event) => {
+                if (event.key === 'Enter') {
+                    identifyWhiskeyFromText();
+                }
             });
         }
 
