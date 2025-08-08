@@ -292,7 +292,7 @@
       const base64Image = currentImageData.split(',')[1];
       document.getElementById('whiskeyList').innerHTML = '<p class="text-gray-300">Identifying whiskey...</p>';
       
-      const API_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=${decryptedApiKey}`;
+      const API_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${decryptedApiKey}`;
 
       try {
         const response = await fetch(API_ENDPOINT, {
@@ -374,7 +374,6 @@
       addButton.className = 'mt-4 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out text-sm';
       addButton.onclick = () => addToMyList(name, composition, estimated_price);
       
-      // Find the text-content div and append the button to it
       const textContentDiv = whiskeyInfo.querySelector('.text-content');
       textContentDiv.appendChild(addButton);
 
@@ -460,6 +459,7 @@
       };
     }
 
+    // FIX: Correctly implemented save logic
     function saveWhiskeyEdit(key) {
       const transaction = db.transaction(['whiskeys'], 'readwrite');
       const store = transaction.objectStore('whiskeys');
@@ -468,11 +468,36 @@
       getRequest.onsuccess = function(event) {
         const whiskey = event.target.result;
         if (whiskey) {
-          whiskey.name = document.getElementById(`name-${key}`).value;
-          whiskey.description = document.getElementById(`composition-${key}`).value;
-          whiskey.price = document.getElementById(`price-${key}`).value;
-          whiskey.notes = document.getElementById(`notes-${key}`).value;
-          store.put(whiskey);
+          // Get the updated values from the input fields, unescaping them first
+          whiskey.name = unescapeHtml(document.getElementById(`name-${key}`).value);
+          whiskey.description = unescapeHtml(document.getElementById(`composition-${key}`).value);
+          whiskey.price = unescapeHtml(document.getElementById(`price-${key}`).value);
+          whiskey.notes = unescapeHtml(document.getElementById(`notes-${key}`).value);
+          
+          // Put the updated object back into the store
+          const putRequest = store.put(whiskey);
+
+          putRequest.onsuccess = function() {
+              console.log("Whiskey updated successfully!");
+              // Provide a non-disruptive visual confirmation instead of an alert
+              const saveButton = document.querySelector(`div[data-key='${key}'] button[onclick^='saveWhiskeyEdit']`);
+              if(saveButton) {
+                  const originalText = saveButton.textContent;
+                  saveButton.textContent = 'Saved!';
+                  saveButton.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+                  saveButton.classList.add('bg-green-600');
+                  setTimeout(() => {
+                      saveButton.textContent = originalText;
+                      saveButton.classList.remove('bg-green-600');
+                      saveButton.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                  }, 2000); // Revert back after 2 seconds
+              }
+          };
+
+          putRequest.onerror = function(event) {
+              console.error("Error updating whiskey:", event.target.error);
+              showMessageBox("Error saving changes.");
+          };
         }
       };
     }
@@ -490,14 +515,31 @@
       return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
 
+    // FIX: Added unescape function to handle saved text correctly
+    function unescapeHtml(str) {
+        if (typeof str !== 'string') return str;
+        return str.replace(/&amp;/g, "&")
+                  .replace(/&lt;/g, "<")
+                  .replace(/&gt;/g, ">")
+                  .replace(/&quot;/g, '"')
+                  .replace(/&#039;/g, "'");
+    }
+
     function showMessageBox(message) {
-      // A simple, non-blocking message box could be implemented here.
-      // For now, we'll use alert.
       alert(message);
     }
 
     // --- INITIALIZATION ---
-    window.onload = initDatabase;
+    // FIX: Added event listener for 'Enter' key on password field
+    window.onload = function() {
+        initDatabase();
+        document.getElementById('passkey').addEventListener('keyup', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault(); // Prevent form submission if it were in a form
+                unlockApi();
+            }
+        });
+    };
   </script>
 
 </body>
