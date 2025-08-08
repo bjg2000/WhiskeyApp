@@ -187,6 +187,10 @@
 
 
     <h2 class="text-2xl font-semibold mb-4 text-gray-300">My List</h2>
+    <!-- Search box to filter the whiskey list -->
+    <div class="max-w-2xl mx-auto mb-6">
+        <input type="text" id="searchBox" placeholder="Search your whiskeys..." class="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+    </div>
     <div id="whiskeyList" class="max-w-2xl mx-auto">
     </div>
 
@@ -204,6 +208,7 @@
         let uploadInput = document.getElementById('uploadInput');
         let db; // IndexedDB database instance
         let currentImageData = null; // Temporarily store the image data
+        let allWhiskies = []; // Array to store all whiskeys for efficient searching
 
         // --- API KEY MANAGEMENT ---
         /**
@@ -455,7 +460,7 @@
             };
             request.onsuccess = function(event) {
                 db = event.target.result;
-                displaySavedWhiskeys();
+                displaySavedWhiskies();
             };
             request.onerror = function(event) {
                 console.error('Database error:', event.target.errorCode);
@@ -475,7 +480,7 @@
             };
             const request = store.add(whiskey);
             request.onsuccess = function() {
-                displaySavedWhiskeys();
+                displaySavedWhiskies();
                 currentImageData = null; // Clear temp image
             };
             request.onerror = function(event) {
@@ -483,46 +488,84 @@
             };
         }
 
-        function displaySavedWhiskeys() {
+        function displaySavedWhiskies() {
             const transaction = db.transaction(['whiskeys'], 'readonly');
             const store = transaction.objectStore('whiskeys');
-            const whiskeyList = document.getElementById('whiskeyList');
-            whiskeyList.innerHTML = '';
-
+            allWhiskies = []; // Clear and repopulate the array
             store.openCursor().onsuccess = function(event) {
                 const cursor = event.target.result;
                 if (cursor) {
-                    const whiskey = cursor.value;
-                    const listItem = document.createElement('div');
-                    listItem.setAttribute('data-key', cursor.key);
-
-                    listItem.innerHTML = `
-                        <button class="delete-button" onclick="deleteWhiskey(${cursor.key})">&times;</button>
-                        ${whiskey.image ? `<img src="${escapeHtml(whiskey.image)}" class="saved-whiskey-image" alt="Whiskey Image">` : ''}
-                        <div class="text-content">
-                            <label for="name-${cursor.key}" class="block text-sm font-medium text-gray-400">Name:</label>
-                            <input type="text" id="name-${cursor.key}" class="editable-field text-lg font-semibold" value="${escapeHtml(whiskey.name)}">
-
-                            <label for="composition-${cursor.key}" class="block text-sm font-medium text-gray-400 mt-2">Composition:</label>
-                            <textarea id="composition-${cursor.key}" class="w-full p-2 mt-1">${escapeHtml(whiskey.description)}</textarea>
-
-                            <label for="price-${cursor.key}" class="block text-sm font-medium text-gray-400 mt-2">Price:</label>
-                            <input type="text" id="price-${cursor.key}" class="editable-field" value="${escapeHtml(whiskey.price)}">
-
-                            <label for="notes-${cursor.key}" class="block text-sm font-medium text-gray-400 mt-2">Notes:</label>
-                            <textarea id="notes-${cursor.key}" placeholder="Add your notes here..." class="w-full p-2 mt-1">${escapeHtml(whiskey.notes)}</textarea>
-
-                            <button onclick="saveWhiskeyEdit(${cursor.key})"
-                                class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
-                                Save Changes
-                            </button>
-                        </div>`;
-                    whiskeyList.appendChild(listItem);
+                    allWhiskies.push(cursor.value);
                     cursor.continue();
+                } else {
+                    // All whiskies have been fetched, now render based on search term
+                    const searchTerm = document.getElementById('searchBox').value;
+                    filterWhiskeyList(searchTerm);
                 }
             };
         }
 
+        /**
+         * Filters the `allWhiskies` array and renders the filtered list.
+         * @param {string} searchTerm The text to search for.
+         */
+        function filterWhiskeyList(searchTerm) {
+            const whiskeyList = document.getElementById('whiskeyList');
+            whiskeyList.innerHTML = ''; // Clear previous results
+
+            const lowerCaseSearchTerm = searchTerm.toLowerCase();
+
+            const filteredWhiskies = allWhiskies.filter(whiskey => {
+                const nameMatch = whiskey.name.toLowerCase().includes(lowerCaseSearchTerm);
+                const descMatch = whiskey.description.toLowerCase().includes(lowerCaseSearchTerm);
+                const notesMatch = whiskey.notes.toLowerCase().includes(lowerCaseSearchTerm);
+                return nameMatch || descMatch || notesMatch;
+            });
+            
+            if (filteredWhiskies.length === 0) {
+                whiskeyList.innerHTML = `<p class="text-center text-gray-500 mt-4">No whiskeys match your search.</p>`;
+            } else {
+                renderWhiskeyList(filteredWhiskies);
+            }
+        }
+
+        /**
+         * Renders an array of whiskey objects to the UI.
+         * @param {Array} whiskiesToDisplay The array of whiskies to render.
+         */
+        function renderWhiskeyList(whiskiesToDisplay) {
+            const whiskeyList = document.getElementById('whiskeyList');
+            whiskeyList.innerHTML = '';
+            whiskiesToDisplay.forEach(whiskey => {
+                const listItem = document.createElement('div');
+                // Use the whiskey's id for the data-key
+                listItem.setAttribute('data-key', whiskey.id);
+
+                listItem.innerHTML = `
+                    <button class="delete-button" onclick="deleteWhiskey(${whiskey.id})">&times;</button>
+                    ${whiskey.image ? `<img src="${escapeHtml(whiskey.image)}" class="saved-whiskey-image" alt="Whiskey Image">` : ''}
+                    <div class="text-content">
+                        <label for="name-${whiskey.id}" class="block text-sm font-medium text-gray-400">Name:</label>
+                        <input type="text" id="name-${whiskey.id}" class="editable-field text-lg font-semibold" value="${escapeHtml(whiskey.name)}">
+
+                        <label for="composition-${whiskey.id}" class="block text-sm font-medium text-gray-400 mt-2">Composition:</label>
+                        <textarea id="composition-${whiskey.id}" class="w-full p-2 mt-1">${escapeHtml(whiskey.description)}</textarea>
+
+                        <label for="price-${whiskey.id}" class="block text-sm font-medium text-gray-400 mt-2">Price:</label>
+                        <input type="text" id="price-${whiskey.id}" class="editable-field" value="${escapeHtml(whiskey.price)}">
+
+                        <label for="notes-${whiskey.id}" class="block text-sm font-medium text-gray-400 mt-2">Notes:</label>
+                        <textarea id="notes-${whiskey.id}" placeholder="Add your notes here..." class="w-full p-2 mt-1">${escapeHtml(whiskey.notes)}</textarea>
+
+                        <button onclick="saveWhiskeyEdit(${whiskey.id})"
+                            class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
+                            Save Changes
+                        </button>
+                    </div>`;
+                whiskeyList.appendChild(listItem);
+            });
+        }
+        
         // FIX: Correctly implemented save logic
         function saveWhiskeyEdit(key) {
             const transaction = db.transaction(['whiskeys'], 'readwrite');
@@ -543,6 +586,15 @@
 
                     putRequest.onsuccess = function() {
                         console.log("Whiskey updated successfully!");
+                        // Update the in-memory array to reflect the change
+                        const index = allWhiskies.findIndex(w => w.id === key);
+                        if (index > -1) {
+                            allWhiskies[index] = { ...whiskey }; // Create a new object to trigger reactivity
+                        }
+                        // Re-render the list to show the change immediately without a full refresh
+                        const searchTerm = document.getElementById('searchBox').value;
+                        filterWhiskeyList(searchTerm);
+                        
                         // Provide a non-disruptive visual confirmation instead of an alert
                         const saveButton = document.querySelector(`div[data-key='${key}'] button[onclick^='saveWhiskeyEdit']`);
                         if(saveButton) {
@@ -570,7 +622,7 @@
             const transaction = db.transaction(['whiskeys'], 'readwrite');
             const store = transaction.objectStore('whiskeys');
             const deleteRequest = store.delete(key);
-            deleteRequest.onsuccess = () => displaySavedWhiskeys();
+            deleteRequest.onsuccess = () => displaySavedWhiskies();
         }
 
         // --- UTILITY FUNCTIONS ---
@@ -623,6 +675,11 @@
                 });
             }
             initDatabase();
+            // Set up the search box listener
+            document.getElementById('searchBox').addEventListener('keyup', (event) => {
+                const searchTerm = event.target.value;
+                filterWhiskeyList(searchTerm);
+            });
         }
 
         window.onload = initializeApp;
